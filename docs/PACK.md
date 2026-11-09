@@ -109,7 +109,9 @@ make sanitize        # ASan/UBSan для всех трёх наборов тес
 Docker (статический ARM64):
 
 ```sh
-docker build --platform linux/arm64 -t quasar-openio-builder .
+docker build --platform linux/arm64 \
+  --build-arg ALPINE_IMAGE=arm64v8/alpine:3.22@sha256:<verified-digest> \
+  -t quasar-openio-builder .
 id=$(docker create --platform linux/arm64 quasar-openio-builder)
 docker cp "$id:/quasar_openio" ./quasar_openio
 docker cp "$id:/plugins/standard/quasar_pack" ./quasar_pack
@@ -120,10 +122,8 @@ docker rm "$id"
 Cross-сборка через Zig (проверена в этой среде):
 
 ```sh
-python3 -m ziglang cc -target aarch64-linux-musl -static -std=c11 -O2 \
-  -Iinclude -Wall -Wextra -Wpedantic -Wshadow -Wformat=2 \
-  -Wconversion -Wsign-conversion -Werror \
-  pack/*.c src/util.c src/framebuffer.c src/json.c -o build/aarch64/quasar_pack
+python3 -m pip install ziglang==0.13.0
+make aarch64   # static PIE AArch64, full RELRO/BIND_NOW, без INTERP/NEEDED
 ```
 
 ## Установка и init
@@ -134,13 +134,17 @@ python3 -m ziglang cc -target aarch64-linux-musl -static -std=c11 -O2 \
 
 ```sh
 sh scripts/install_odm.sh --preview
+# Остановить демон/плагин; задать четыре SHA-256 pin из доверенной сборки.
+QUASAR_BINARY_SHA256=<hex> QUASAR_PACK_BINARY_SHA256=<hex> \
+QUASAR_PLUGIN_CONF_SHA256=<hex> QUASAR_RC_SHA256=<hex> \
 sh scripts/install_odm.sh --apply --confirm-odm-unprotected
 setprop ctl.start quasar_openio
 ```
 
 Установщик кладёт `quasar_pack` и `plugin.conf` в
-`/odm/lib/quasar/plugins/standard`, ставит `quasar_openio_exec` бинарнику и
-`vendor_configs_file` конфигу. Старые файлы `/odm/bin/quasar_pack` и
+`/odm/lib/quasar/plugins/standard`, ставит `quasar_plugin_exec` бинарнику пака и
+`vendor_configs_file` конфигу. Супервизор запускает его в отдельный SELinux-домен
+`quasar_plugin`; `execute_no_trans` не используется. Старые файлы `/odm/bin/quasar_pack` и
 `/odm/etc/init/quasar_pack.rc` больше не создаются — их нужно удалить вручную.
 
 ## Тесты

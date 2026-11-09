@@ -81,27 +81,67 @@ inserted_for() { case "$1" in 4) printf '%s\n' "$INSERTED4" ;; 6) printf '%s\n' 
 set_created() { case "$1" in 4) CREATED4=1 ;; 6) CREATED6=1 ;; esac; }
 set_inserted() { case "$1" in 4) INSERTED4=1 ;; 6) INSERTED6=1 ;; esac; }
 
-# Return names of our chains, refusing to flush a colliding foreign chain.
+# Ownership is proven by a marked OUTPUT jump plus a non-empty chain whose every
+# rule carries the marker. An empty QIO_OTA_* chain has no provenance and is never
+# touched, even if its name looks like ours. Any foreign reference is refused.
+has_marker() {
+    case " $1 " in
+        *" --comment $MARKER "*|*" --comment \"$MARKER\" "*) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+valid_chain_name() {
+    case "$1" in QIO_OTA_?*) ;; *) return 1 ;; esac
+    case "$1" in *[!A-Za-z0-9_]*) return 1 ;; *) return 0 ;; esac
+}
+
 owned_chains() {
     tool=$1
     listing=$("$tool" -S) || return 1
     names=
+    candidates=
     while IFS= read -r line; do
         case "$line" in
             -N\ QIO_OTA_*)
                 name=${line#-N }
-                names="$names $name"
-                ;;
-            -A\ QIO_OTA_*)
-                case "$line" in *"--comment $MARKER"*|*"--comment \"$MARKER\""*) ;; *) return 1 ;; esac
+                valid_chain_name "$name" || return 1
+                candidates="$candidates $name"
                 ;;
             -A\ OUTPUT\ *-j\ QIO_OTA_*)
-                case "$line" in *"--comment $MARKER"*|*"--comment \"$MARKER\""*) ;; *) return 1 ;; esac
+                has_marker "$line" || return 1
+                target=${line##* -j }
+                valid_chain_name "$target" || return 1
+                case " $names " in *" $target "*) ;; *) names="$names $target" ;; esac
+                ;;
+            -A\ *\ -j\ QIO_OTA_*)
+                return 1
+                ;;
+            -A\ QIO_OTA_*)
+                has_marker "$line" || return 1
                 ;;
         esac
     done <<EOF
 $listing
 EOF
+    for name in $candidates; do
+        case " $names " in *" $name "*) ;; *) return 1 ;; esac
+    done
+    for name in $names; do
+        chain_listing=$("$tool" -S "$name") || return 1
+        rules=0
+        while IFS= read -r line; do
+            case "$line" in
+                -A\ "$name"\ *)
+                    has_marker "$line" || return 1
+                    rules=$((rules + 1))
+                    ;;
+            esac
+        done <<EOF
+$chain_listing
+EOF
+        [ "$rules" -gt 0 ] || return 1
+    done
     printf '%s\n' "$names"
 }
 

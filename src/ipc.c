@@ -54,6 +54,10 @@ int qio_ipc_init(qio_app *app)
         qio_log("Unix socket path is too long");
         return -1;
     }
+    if (qio_private_parent(app->options.socket_path) != 0) {
+        qio_log("socket parent must be a private 0700 directory owned by this euid");
+        return -1;
+    }
     address.sun_family = AF_UNIX;
     strcpy(address.sun_path, app->options.socket_path);
     for (size_t i = 0; i < QIO_MAX_CLIENTS; ++i) app->clients[i].fd = -1;
@@ -253,8 +257,52 @@ static void flush_client(qio_app *app, size_t index, int64_t now)
         client->out_used -= sent;
         memmove(client->out, client->out + sent, client->out_used);
         client->slow_deadline_ms = 0;
+        /* Delivering events counts as activity: a pure listener must not be
+         * dropped by the idle timeout while it is actively consuming. */
+        client->last_activity_ms = now;
     }
     if (client->eof || client->discard) close_client(app, index);
+}
+
+/* Process at most one bounded quantum of complete lines. Any remainder stays
+ * buffered and is picked up by qio_ipc_tick(), so a pipeline longer than the
+ * quantum is never stalled waiting for more client input. */
+static void process_lines(qio_app *app, size_t index, int64_t now)
+{
+    qio_client *client = &app->clients[index];
+    if (client->fd < 0 || client->discard) return;
+    size_t consumed = 0;
+    for (size_t command = 0; command < 8; ++command) {
+        uint8_t *newline = memchr(client->in + consumed, '\n', client->in_used - consumed);
+        if (newline == NULL) break;
+        size_t length = (size_t)(newline - (client->in + consumed));
+        dispatch(app, index, client->in + consumed, length, now);
+        consumed += length + 1;
+        if (client->fd < 0) return;
+        if (client->discard) break;
+    }
+    if (client->eof && consumed < client->in_used && !client->discard) {
+        dispatch(app, index, client->in + consumed, client->in_used - consumed, now);
+        consumed = client->in_used;
+    }
+    if (client->fd < 0) return;
+    client->in_used -= consumed;
+    memmove(client->in, client->in + consumed, client->in_used);
+    if (client->in_used == QIO_REQUEST_MAX && !client->discard) {
+        error_response(app, index, "request_too_long");
+        client->discard = true;
+    }
+    client->partial_deadline_ms = client->in_used == 0 ? 0 : now + 5000;
+}
+
+bool qio_ipc_has_pending(const qio_app *app)
+{
+    for (size_t i = 0; i < QIO_MAX_CLIENTS; ++i) {
+        const qio_client *client = &app->clients[i];
+        if (client->fd < 0 || client->discard || client->in_used == 0) continue;
+        if (memchr(client->in, '\n', client->in_used) != NULL) return true;
+    }
+    return false;
 }
 
 void qio_ipc_client_event(qio_app *app, size_t index, short revents, int64_t now)
@@ -274,27 +322,8 @@ void qio_ipc_client_event(qio_app *app, size_t index, short revents, int64_t now
             client->in_used += (size_t)count;
             client->last_activity_ms = now;
         }
-        size_t consumed = 0;
-        for (size_t command = 0; command < 8; ++command) {
-            uint8_t *newline = memchr(client->in + consumed, '\n', client->in_used - consumed);
-            if (newline == NULL) break;
-            size_t length = (size_t)(newline - (client->in + consumed));
-            dispatch(app, index, client->in + consumed, length, now);
-            consumed += length + 1;
-            if (client->fd < 0) return;
-        }
-        if (client->eof && consumed < client->in_used) {
-            dispatch(app, index, client->in + consumed, client->in_used - consumed, now);
-            consumed = client->in_used;
-        }
+        process_lines(app, index, now);
         if (client->fd < 0) return;
-        client->in_used -= consumed;
-        memmove(client->in, client->in + consumed, client->in_used);
-        if (client->in_used == QIO_REQUEST_MAX) {
-            error_response(app, index, "request_too_long");
-            client->discard = true;
-        }
-        client->partial_deadline_ms = client->in_used == 0 ? 0 : now + 5000;
     }
     if ((revents & (POLLERR | POLLHUP)) != 0 && client->out_used == 0) {
         close_client(app, index);
@@ -315,6 +344,10 @@ void qio_ipc_tick(qio_app *app, int64_t now)
             close_client(app, i);
             ++app->lost_events;
             continue;
+        }
+        if (memchr(client->in, '\n', client->in_used) != NULL) {
+            process_lines(app, i, now);
+            if (client->fd < 0) continue;
         }
         if (client->out_used != 0) flush_client(app, i, now);
     }

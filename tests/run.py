@@ -85,10 +85,17 @@ def read_exact(sock: socket.socket, count: int, initial: bytes = b"") -> bytes:
     return bytes(data)
 
 
-def http_get(port: int, path: str):
+def http_get(port: int, path: str, token: str | None = None):
     sock = socket.create_connection(("127.0.0.1", port), timeout=3)
-    sock.sendall(f"GET {path} HTTP/1.1\r\nHost: localhost\r\n\r\n".encode())
+    auth = f"Authorization: Bearer {token}\r\n" if token else ""
+    sock.sendall(f"GET {path} HTTP/1.1\r\nHost: localhost\r\n{auth}\r\n".encode())
     return sock, *http_header(sock)
+
+
+def pcm_connect(port: int, token: str):
+    sock = socket.create_connection(("127.0.0.1", port), timeout=3)
+    sock.sendall(f"AUTH {token}\n".encode())
+    return sock
 
 
 def input_event(kind: int, code: int, value: int) -> bytes:
@@ -105,13 +112,15 @@ class Daemon:
     def __init__(self, binary: Path, fixture: Path, env: dict, socket_path: str,
                  log_path: Path, audio: bool = True, dry: bool = False):
         self.socket_path = socket_path
+        self.token_path = Path(socket_path).parent / "audio.token"
         self.log_path = log_path
         self.log = log_path.open("wb")
         args = [str(binary), "--socket", socket_path, "--no-plugin"]
         self.pcm_port = free_port()
         self.http_port = free_port()
         if audio:
-            args += ["--audio-port", str(self.pcm_port), "--http-port", str(self.http_port)]
+            args += ["--audio-port", str(self.pcm_port), "--http-port", str(self.http_port),
+                     "--audio-token-file", str(self.token_path)]
         else:
             args += ["--no-audio"]
         if dry:
@@ -128,6 +137,10 @@ class Daemon:
         wait_for(lambda: Path(self.socket_path).exists() and
                  "IPC listening" in self.log_path.read_text(errors="replace"), "daemon startup")
         assert self.process.poll() is None, self.log_path.read_text(errors="replace")
+        self.token = self.token_path.read_text().strip() if self.token_path.exists() else ""
+        if self.token:
+            assert len(self.token) == 64
+            assert self.token_path.stat().st_mode & 0o777 == 0o600
 
     def stop(self, kill: bool = False):
         if self.process.poll() is None:
@@ -189,6 +202,16 @@ def integration(binary: Path, fixture: Path, root: Path, sanitize: bool = False)
             sock.connect(socket_path)
             sock.sendall(b"x" * 5000)
             assert read_line(sock)["error"] == "request_too_long"
+
+        # A single write containing more than the 8-command quantum must not
+        # stall the ninth reply until additional input arrives.
+        with socket.socket(socket.AF_UNIX) as sock:
+            sock.settimeout(2)
+            sock.connect(socket_path)
+            sock.sendall(b'{"action":"status"}\n' * 9)
+            with sock.makefile("rb") as responses:
+                for _ in range(9):
+                    assert json.loads(responses.readline())["ok"] is True
 
         # SIGSTOP/CONT are captured by the fixture; PID identity is rechecked.
         assert command(socket_path, {"action": "pause_sdk"})["ok"]
@@ -257,11 +280,36 @@ def integration(binary: Path, fixture: Path, root: Path, sanitize: bool = False)
                           "volume_up", "volume_up_released"], events
         subscriber.close()
 
+        # Loopback alone is not authorization: both endpoints require the token.
+        denied, headers, _ = http_get(daemon.http_port, "/health")
+        assert b"401" in headers
+        denied.close()
+        denied, headers, _ = http_get(daemon.http_port, "/health", "0" * 64)
+        assert b"401" in headers
+        denied.close()
+        with socket.create_connection(("127.0.0.1", daemon.pcm_port), timeout=3) as bad:
+            bad.sendall(b"AUTH " + b"0" * 64 + b"\n" + b"\x01\x02\x03\x04")
+            assert bad.recv(1) == b""
+        assert command(socket_path, {"action": "status"})["audio"]["accepted_bytes"] == 0
+        with socket.create_connection(("127.0.0.1", daemon.pcm_port), timeout=3) as slow:
+            slow.sendall(b"AUTH ")
+            wait_for(lambda: slow.recv(1) == b"", "absolute auth handshake timeout", timeout=3)
+
         # PCM -> bounded ring -> HTTP WAV, including frame-aligned overflow.
-        pcm = socket.create_connection(("127.0.0.1", daemon.pcm_port), timeout=3)
+        pcm = pcm_connect(daemon.pcm_port, daemon.token)
+        wait_for(lambda: command(socket_path, {"action": "status"})["audio"]["producer_connected"],
+                 "authenticated producer")
+        # An idle streaming consumer must release the single audio slot.
+        idle, headers, extra = http_get(daemon.http_port, "/audio.wav", daemon.token)
+        assert b"200 OK" in headers
+        wait_for(lambda: idle.recv(1) == b"", "streaming idle lease", timeout=3)
+        idle.close()
+        health, headers, _ = http_get(daemon.http_port, "/health", daemon.token)
+        assert b"200 OK" in headers
+        health.close()
         pattern = bytes(range(256)) * 16  # 4096 bytes, complete S16LE stereo frames
         pcm.sendall(pattern)
-        consumer, headers, extra = http_get(daemon.http_port, "/audio.wav")
+        consumer, headers, extra = http_get(daemon.http_port, "/audio.wav", daemon.token)
         assert b"200 OK" in headers and b"audio/wav" in headers, headers
         wav = read_exact(consumer, 44, extra)
         assert wav[:4] == b"RIFF" and wav[8:12] == b"WAVE" and wav[36:40] == b"data"
@@ -269,7 +317,7 @@ def integration(binary: Path, fixture: Path, root: Path, sanitize: bool = False)
         assert struct.unpack_from("<H", wav, 22)[0] == 2
         assert read_exact(consumer, len(pattern), extra[44:]) == pattern
         consumer.close()
-        health, headers, body = http_get(daemon.http_port, "/health")
+        health, headers, body = http_get(daemon.http_port, "/health", daemon.token)
         length = int(next(line.split(b":", 1)[1] for line in headers.split(b"\r\n")
                           if line.lower().startswith(b"content-length:")))
         health_json = json.loads(read_exact(health, length, body))
@@ -285,14 +333,14 @@ def integration(binary: Path, fixture: Path, root: Path, sanitize: bool = False)
             command(socket_path, {"action": "status"})), "bounded audio overflow")
         assert status["audio"]["buffered_bytes"] <= 262144
         assert status["audio"]["buffered_bytes"] % 4 == 0
-        consumer, headers, extra = http_get(daemon.http_port, "/audio.wav")
+        consumer, headers, extra = http_get(daemon.http_port, "/audio.wav", daemon.token)
         buffered = status["audio"]["buffered_bytes"]
         body = read_exact(consumer, buffered, extra[44:])
         assert body == total[-buffered:]
         pcm.close()
         assert consumer.recv(1) == b""
         consumer.close()
-        denied, headers, _ = http_get(daemon.http_port, "/missing")
+        denied, headers, _ = http_get(daemon.http_port, "/missing", daemon.token)
         assert b"404" in headers
         denied.close()
 
@@ -323,6 +371,7 @@ def integration(binary: Path, fixture: Path, root: Path, sanitize: bool = False)
         assert cpu_ticks(daemon.process.pid) - ticks <= 4, "idle CPU spin"
         daemon.stop()
         assert not Path(socket_path).exists()
+        assert not daemon.token_path.exists()
 
         # Crash recovery resumes only the recorded PID/start time in the same boot.
         daemon = Daemon(binary, fixture, env, socket_path, root / "recovery.log")
@@ -388,10 +437,12 @@ def main() -> int:
             "QIO_REMOTE_PATH": root / "remote", "QIO_SCREEN_PATH": root / "fb4",
             "QIO_RING_PATH": root / "fb5", "QIO_PROC_ROOT": root / "proc",
             "QIO_SDK_JOURNAL_PATH": root / "sdk.journal", "QIO_LOCK_PATH": root / "daemon.lock",
+            "QIO_RUNTIME_DIR": root,
         }
         binary = build / "quasar_openio"
         subprocess.run([cc, *flags, "-Iinclude", *[str(p) for p in sorted((ROOT / "src").glob("*.c"))],
                         *[f"-D{key}={json.dumps(str(value))}" for key, value in defines.items()],
+                        "-DQIO_HTTP_STREAM_IDLE_MS=400", "-DQIO_AUDIO_AUTH_TIMEOUT_MS=400",
                         "-o", str(binary)], cwd=ROOT, check=True)
         try:
             integration(binary, build / "libfixture.so", root, args.sanitize)

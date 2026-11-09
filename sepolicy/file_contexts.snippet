@@ -2,5 +2,6 @@
 /odm/bin/quasar_openio                             u:object_r:quasar_openio_exec:s0
 /odm/etc/init/quasar_openio\.rc                    u:object_r:vendor_configs_file:s0
 /odm/lib/quasar(/.*)?                              u:object_r:vendor_configs_file:s0
-/odm/lib/quasar/plugins/standard/quasar_pack       u:object_r:quasar_openio_exec:s0
+/odm/lib/quasar/plugins/standard/quasar_pack       u:object_r:quasar_plugin_exec:s0
 /odm/lib/quasar/plugins/standard/plugin\.conf      u:object_r:vendor_configs_file:s0
+/data/local/tmp/quasar-openio(/.*)?                u:object_r:quasar_openio_data_file:s0

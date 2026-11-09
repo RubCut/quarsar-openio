@@ -123,6 +123,35 @@ class OtaScript(unittest.TestCase):
         self.assertNotEqual(self.run_script("--remove").returncode, 0)
         self.assertEqual(self.state.read_text(), before)
 
+    def test_empty_foreign_chain_is_not_owned(self):
+        foreign = {"4": {"chains": {"QIO_OTA_FOREIGN": []}, "output": []},
+                   "6": {"chains": {}, "output": []}}
+        self.state.write_text(json.dumps(foreign))
+        before = self.state.read_text()
+        for mode in ("--apply", "--remove", "--status"):
+            result = self.run_script(mode)
+            self.assertNotEqual(result.returncode, 0, mode)
+        self.assertEqual(self.state.read_text(), before)
+
+    def test_marked_chain_without_marked_jump_is_not_owned(self):
+        rule = ["-d", "192.0.2.1", "-m", "comment", "--comment", MARKER, "-j", "DROP"]
+        state = {"4": {"chains": {"QIO_OTA_STALE": [rule]}, "output": []},
+                 "6": {"chains": {}, "output": []}}
+        self.state.write_text(json.dumps(state))
+        before = self.state.read_text()
+        self.assertNotEqual(self.run_script("--remove").returncode, 0)
+        self.assertEqual(self.state.read_text(), before)
+
+    def test_foreign_reference_to_quasar_chain_is_refused(self):
+        rule = ["-d", "192.0.2.1", "-m", "comment", "--comment", MARKER, "-j", "DROP"]
+        state = {"4": {"chains": {"QIO_OTA_OURS": [rule], "FOREIGN": [["-j", "QIO_OTA_OURS"]]},
+                       "output": [["-m", "comment", "--comment", MARKER, "-j", "QIO_OTA_OURS"]]},
+                 "6": {"chains": {}, "output": []}}
+        self.state.write_text(json.dumps(state))
+        before = self.state.read_text()
+        self.assertNotEqual(self.run_script("--remove").returncode, 0)
+        self.assertEqual(self.state.read_text(), before)
+
     def test_ipv4_only_requires_verified_disabled_ipv6(self):
         self.assertNotEqual(self.run_script("--apply", "--ipv4-only").returncode, 0)
         self.ipv6.write_text("1\n")

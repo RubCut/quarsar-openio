@@ -21,10 +21,13 @@ static void usage(FILE *out)
         "  --audio-port PORT   loopback PCM input (default 19080)\n"
         "  --http-port PORT    loopback HTTP output (default 19081)\n"
         "  --no-audio          disable both audio listeners\n"
+        "  --audio-token-file PATH  bearer token file, 0600 (default %s)\n"
         "  --plugin-dir PATH   standard plugin directory (default %s)\n"
         "  --no-plugin         do not launch plugin binaries\n"
+        "  --plugin-uid UID    drop the plugin to this unprivileged uid (needs --plugin-gid)\n"
+        "  --plugin-gid GID    primary group for the dropped plugin\n"
         "  --dry-run           no input/framebuffer opens, SDK signals, journal writes or plugin\n"
-        "  --version | --help\n", QIO_VERSION, QIO_SOCKET_PATH, QIO_PLUGIN_DIR);
+        "  --version | --help\n", QIO_VERSION, QIO_SOCKET_PATH, QIO_AUDIO_TOKEN_PATH, QIO_PLUGIN_DIR);
 }
 
 static int parse_port(const char *text, int *port)
@@ -46,6 +49,7 @@ static int parse_options(int argc, char **argv, qio_options *options)
     options->audio_port = 19080;
     options->http_port = 19081;
     options->plugin_dir = QIO_PLUGIN_DIR;
+    options->audio_token_file = QIO_AUDIO_TOKEN_PATH;
     for (int i = 1; i < argc; ++i) {
         const char *arg = argv[i];
         if (strcmp(arg, "--help") == 0) { usage(stdout); return 1; }
@@ -57,8 +61,22 @@ static int parse_options(int argc, char **argv, qio_options *options)
         const char *value = argv[++i];
         if (strcmp(arg, "--socket") == 0) {
             options->socket_path = value;
+        } else if (strcmp(arg, "--audio-token-file") == 0) {
+            options->audio_token_file = value;
         } else if (strcmp(arg, "--plugin-dir") == 0) {
             options->plugin_dir = value;
+        } else if (strcmp(arg, "--plugin-uid") == 0 || strcmp(arg, "--plugin-gid") == 0) {
+            char *end;
+            errno = 0;
+            unsigned long id = strtoul(value, &end, 10);
+            if (errno != 0 || end == value || *end != '\0' || id == 0 || id > 4294967294UL)
+                return -1;
+            if (strcmp(arg, "--plugin-uid") == 0) {
+                options->plugin_uid = (uid_t)id;
+                options->plugin_uid_set = true;
+            } else {
+                options->plugin_gid = (gid_t)id;
+            }
         } else if (strcmp(arg, "--socket-mode") == 0) {
             char *end;
             errno = 0;
@@ -85,6 +103,8 @@ static int parse_options(int argc, char **argv, qio_options *options)
     }
     if (!options->no_audio && options->audio_port == options->http_port) return -1;
     if (options->change_gid && options->socket_mode != 0660) return -1;
+    if (options->plugin_uid_set && options->plugin_gid == 0) return -1;
+    if (!options->plugin_uid_set && options->plugin_gid != 0) return -1;
     return 0;
 }
 
@@ -134,6 +154,8 @@ static int run(void)
             consider_timeout(&timeout, app.audio.last_sound_ms + 1500, now);
         for (size_t i = 0; i < QIO_HTTP_CLIENTS; ++i)
             consider_timeout(&timeout, app.audio.http[i].deadline_ms, now);
+        /* Buffered complete commands are pending work: never sleep on them. */
+        if (qio_ipc_has_pending(&app)) timeout = 0;
         size_t used = 0;
         fds[used].fd = qio_signal_fd(); fds[used].events = POLLIN;
         roles[used] = QIO_POLL_SIGNAL; indices[used++] = 0;
@@ -212,6 +234,7 @@ int main(int argc, char **argv)
         qio_log("signal setup: %s", strerror(errno));
         goto cleanup;
     }
+    if (qio_runtime_prepare() != 0) goto cleanup;
     if (qio_lock_acquire(&app) != 0) goto cleanup;
     if (!app.options.dry_run && qio_sdk_recover(&app.sdk) != 0) {
         qio_log("SDK recovery failed; refusing to start with an unsafe journal");

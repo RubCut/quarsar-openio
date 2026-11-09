@@ -8,7 +8,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <grp.h>
 #include <sys/prctl.h>
+#include <sys/syscall.h>
 #include <sys/resource.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
@@ -232,10 +234,11 @@ static void reap_child(qio_app *app, int64_t now)
     close_child_pipes(plugin);
     qio_close_fd(&app->audio.mirror_fd);
     /* The plugin owns fb5 and leaves the ring dark when an animation ends. */
-    if (animation && overlay_matches) {
+    if (animation && overlay_matches && !plugin->overlay_relaunch) {
         plugin->overlay_active = false;
         plugin->overlay[0] = '\0';
     }
+    plugin->overlay_relaunch = false;
     /* Crash backoff only for an unexpected exit; mode transitions stay snappy. */
     plugin->next_launch_ms = now + ((animation || intentional_stop) ?
                                     PLUGIN_MIN_LAUNCH_GAP_MS : 1000);
@@ -285,6 +288,81 @@ static bool mode_allowed(const qio_plugin *plugin, const char *mode)
     return false;
 }
 
+/* Async-signal-safe close of every inherited descriptor. RLIMIT_NOFILE does not
+ * close descriptors that are already open, and a fixed 3..127 sweep leaks any
+ * higher fd handed to the daemon. Enumerate /proc/self/fd with raw syscalls
+ * (no opendir/malloc after fork); fall back to close_range or a bounded sweep. */
+struct qio_dirent64 {
+    uint64_t d_ino;
+    int64_t d_off;
+    unsigned short d_reclen;
+    unsigned char d_type;
+    char d_name[];
+};
+
+static void close_inherited_fds(int keep)
+{
+    int dir = open("/proc/self/fd", O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+    if (dir >= 0) {
+        _Alignas(uint64_t) char buffer[1024];
+        int snapshot[1024];
+        size_t used = 0;
+        bool overflow = false;
+        bool enumerated = false;
+        for (;;) {
+            long count = syscall(SYS_getdents64, dir, buffer, sizeof(buffer));
+            if (count < 0 && errno == EINTR) continue;
+            if (count <= 0) {
+                enumerated = count == 0;
+                break;
+            }
+            for (long offset = 0; offset + (long)sizeof(struct qio_dirent64) <= count; ) {
+                struct qio_dirent64 *entry = (struct qio_dirent64 *)(buffer + offset);
+                size_t reclen = entry->d_reclen;
+                if (reclen < offsetof(struct qio_dirent64, d_name) + 2 ||
+                    reclen > (size_t)(count - offset)) break;
+                size_t name_max = reclen - offsetof(struct qio_dirent64, d_name);
+                int fd = 0;
+                size_t i = 0;
+                bool numeric = entry->d_name[0] != '\0';
+                for (; numeric && i < name_max && entry->d_name[i] != '\0'; ++i) {
+                    char c = entry->d_name[i];
+                    if (c < '0' || c > '9') { numeric = false; break; }
+                    fd = fd * 10 + (c - '0');
+                    if (fd > 1048576) { numeric = false; break; }
+                }
+                if (numeric && i == name_max) numeric = false; /* missing NUL */
+                if (numeric && fd > STDERR_FILENO && fd != keep && fd != dir) {
+                    if (used < sizeof(snapshot) / sizeof(snapshot[0])) snapshot[used++] = fd;
+                    else overflow = true;
+                }
+                offset += (long)reclen;
+            }
+        }
+        close(dir);
+        /* Closing entries while reading /proc/self/fd can shift the directory
+         * stream and skip descriptors. Snapshot first, then close. */
+        if (enumerated && !overflow) {
+            for (size_t i = 0; i < used; ++i) close(snapshot[i]);
+            return;
+        }
+    }
+#ifdef SYS_close_range
+    if (keep > STDERR_FILENO) {
+        long first = syscall(SYS_close_range, (unsigned)(STDERR_FILENO + 1),
+                             (unsigned)(keep - 1), 0U);
+        long second = syscall(SYS_close_range, (unsigned)(keep + 1), ~0U, 0U);
+        if (first == 0 && second == 0) return;
+    } else if (syscall(SYS_close_range, (unsigned)(STDERR_FILENO + 1), ~0U, 0U) == 0) {
+        return;
+    }
+#endif
+    /* Last resort: a bounded sweep. /proc is present on Android, so this is only
+     * reached in exotic sandboxes. */
+    for (int fd = STDERR_FILENO + 1; fd < 65536; ++fd)
+        if (fd != keep) close(fd);
+}
+
 static int set_nonblock_cloexec(int fd)
 {
     int flags = fcntl(fd, F_GETFL);
@@ -325,8 +403,7 @@ static void launch_child(qio_app *app, const char *mode, int64_t now)
     char *envp[PLUGIN_ENV_MAX];
     size_t env_used = 0;
     for (char **e = environ; *e != NULL; ++e) {
-        if (strncmp(*e, "LD_PRELOAD=", 11) == 0 || strncmp(*e, "LD_LIBRARY_PATH=", 16) == 0)
-            continue;
+        if (strncmp(*e, "LD_", 3) == 0) continue;
         if (env_used + 1 >= PLUGIN_ENV_MAX) {
             qio_log("plugin: environment too large; refusing launch");
             goto fail;
@@ -344,23 +421,31 @@ static void launch_child(qio_app *app, const char *mode, int64_t now)
         (void)setpgid(0, 0);
         (void)prctl(PR_SET_PDEATHSIG, SIGTERM);
         if (getppid() != parent) _exit(1);
-        struct rlimit limit = {0, 0};
-        (void)setrlimit(RLIMIT_CORE, &limit);
-        limit.rlim_cur = limit.rlim_max = 32U * 1024U * 1024U;
-        (void)setrlimit(RLIMIT_AS, &limit);
-        limit.rlim_cur = limit.rlim_max = 32;
-        (void)setrlimit(RLIMIT_NOFILE, &limit);
         if (dup2(in_pipe[0], STDIN_FILENO) < 0 || dup2(out_pipe[1], STDOUT_FILENO) < 0 ||
             (visualizer && dup2(audio_pipe[0], 3) < 0))
             _exit(126);
         (void)fcntl(STDIN_FILENO, F_SETFD, 0);
         (void)fcntl(STDOUT_FILENO, F_SETFD, 0);
         if (visualizer) (void)fcntl(3, F_SETFD, 0);
-        /* Close every inherited descriptor except stdio and the visualizer PCM fd. */
-        for (int fd = 3; fd < 128; ++fd) {
-            if (visualizer && fd == 3) continue;
-            close(fd);
+        /* Close before lowering RLIMIT_NOFILE: enumerating /proc needs a free fd. */
+        close_inherited_fds(visualizer ? 3 : -1);
+        struct rlimit limit = {0, 0};
+        if (setrlimit(RLIMIT_CORE, &limit) != 0) _exit(124);
+        limit.rlim_cur = limit.rlim_max = 32U * 1024U * 1024U;
+        if (setrlimit(RLIMIT_AS, &limit) != 0) _exit(124);
+        limit.rlim_cur = limit.rlim_max = 32;
+        if (setrlimit(RLIMIT_NOFILE, &limit) != 0) _exit(124);
+        /* Optional privilege drop. Fail closed rather than run as root by accident. */
+        if (app->options.plugin_uid_set) {
+            if (setgroups(0, NULL) != 0) _exit(125);
+            if (setgid(app->options.plugin_gid) != 0) _exit(125);
+            if (setuid(app->options.plugin_uid) != 0) _exit(125);
+            if (getuid() != app->options.plugin_uid || geteuid() != app->options.plugin_uid ||
+                getgid() != app->options.plugin_gid || getegid() != app->options.plugin_gid)
+                _exit(125);
         }
+        /* The plugin must never regain privileges through a setuid binary. */
+        if (prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) != 0) _exit(125);
         execve(plugin->binary, argv, envp);
         _exit(127);
     }
@@ -419,7 +504,13 @@ static bool request_overlay(qio_app *app, const char *name, int64_t now)
         strcmp(name, "music-play") != 0 && strcmp(name, "music-pause") != 0)
         return false; /* the play intro must finish before the visualizer */
     if (plugin->overlay_active && strcmp(plugin->overlay, name) == 0) {
+        /* The running child was exec'd with a fixed --duration-ms, so extending
+         * only the supervisor deadline would be a lie. Restart it instead. */
         plugin->overlay_deadline_ms = now + animation_duration(name);
+        if (plugin->child > 0 && strcmp(plugin->child_mode, name) == 0) {
+            plugin->overlay_relaunch = true;
+            stop_child(app, now);
+        }
         return true;
     }
     snprintf(plugin->overlay, sizeof(plugin->overlay), "%s", name);
