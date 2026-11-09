@@ -1,0 +1,9 @@
+.git
+build
+artifacts
+tests
+attachment-review
+**/__pycache__
+*.jpeg
+*.zip
+*.sock

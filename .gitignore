@@ -1,0 +1,9 @@
+/build/
+/artifacts/
+__pycache__/
+*.pyc
+*.o
+*.d
+*.so
+*.sock
+quasar_openio
