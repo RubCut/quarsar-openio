@@ -1,0 +1,52 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Reference AOSP-style policy fragment. Adapt to the real device policy.
+# This is not a standalone module for an unknown ROM.
+
+type quasar_openio, domain;
+type quasar_openio_exec, exec_type, file_type, vendor_file_type;
+
+init_daemon_domain(quasar_openio)
+net_domain(quasar_openio)
+
+# Root daemon: signal io.sdk, create/chmod socket, access device nodes.
+allow quasar_openio self:capability { kill chown fowner dac_override dac_read_search sys_resource };
+allow quasar_openio self:process signal_perms;
+allow quasar_openio self:process { fork setpgid sigkill };
+allow quasar_openio self:unix_stream_socket create_stream_socket_perms;
+
+# Framebuffer and input observation. Verify actual labels with ls -Z.
+allow quasar_openio device:dir r_dir_perms;
+allow quasar_openio graphics_device:dir r_dir_perms;
+allow quasar_openio graphics_device:chr_file rw_file_perms;
+allow quasar_openio input_device:dir r_dir_perms;
+allow quasar_openio input_device:chr_file r_file_perms;
+
+# Socket, lock and crash-recovery journal under /data/local/tmp.
+allow quasar_openio shell_data_file:dir rw_dir_perms;
+allow quasar_openio shell_data_file:file create_file_perms;
+allow quasar_openio shell_data_file:sock_file create_file_perms;
+
+# /proc inventory for exact io.sdk PID/starttime/cmdline validation.
+allow quasar_openio proc:dir r_dir_perms;
+allow quasar_openio domain:dir { search open read getattr };
+allow quasar_openio domain:file { open read getattr };
+allow quasar_openio proc_sys_kernel:file r_file_perms;
+# Some ROMs label random/boot_id differently; add the observed type if needed.
+allow quasar_openio proc_random:file r_file_perms;
+
+# Replace priv_app with the actual com.yandex.io.sdk domain from ps -Z.
+allow quasar_openio priv_app:process { sigstop sigcont };
+allow quasar_openio priv_app:dir search;
+allow quasar_openio priv_app:file { open read getattr };
+
+# Loopback TCP bind/connect for high ports. Tighten to concrete port types if available.
+allow quasar_openio node:tcp_socket node_bind;
+allow quasar_openio unreserved_port_type:tcp_socket name_bind;
+allow quasar_openio unreserved_port_type:tcp_socket name_connect;
+
+# The standard plugin is exec'd by the supervisor and stays in this domain.
+# It maps fb4 and fb5 itself, so it needs the same graphics_device access.
+allow quasar_openio quasar_openio_exec:file { getattr open read execute execute_no_trans map };
+allow quasar_openio vendor_configs_file:dir r_dir_perms;
+allow quasar_openio vendor_configs_file:file r_file_perms;
+allow quasar_openio self:fifo_file rw_file_perms;
