@@ -71,6 +71,10 @@ static int parse_string(const uint8_t *line, size_t length, size_t *pos,
                 if (length - *pos < 4 || hex4(line + *pos, &code) != 0)
                     return -1;
                 *pos += 4;
+                /* NUL would truncate the decoded string for strcmp users, so
+                 * "status\u0000ignored" must not parse as "status". */
+                if (code == 0)
+                    return -1;
                 if (code >= 0x80)
                     return -1;
                 if (code >= 0xd800 && code <= 0xdfff)

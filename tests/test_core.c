@@ -20,7 +20,10 @@ static void test_json(void)
         "{\"action\":\"status\",\"command\":\"reboot\"}",
         "{\"action\":\"status\"} trailing", "{\"action\":\"status\",}",
         "{\"action\":[\"status\"]}", "{\"action\":\"\\u0430dmin\"}",
-        "{\"action\":\"status\"}\n{\"action\":\"pause_sdk\"}"
+        "{\"action\":\"status\"}\n{\"action\":\"pause_sdk\"}",
+        "{\"action\":\"status\\u0000ignored\"}",
+        "{\"action\":\"status\\u0000\"}",
+        "{\"action\\u0000x\":\"status\"}"
     };
     for (size_t i = 0; i < sizeof(invalid) / sizeof(invalid[0]); ++i)
         assert(qio_parse_request((const uint8_t *)invalid[i], strlen(invalid[i]), &request) != 0);

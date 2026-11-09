@@ -30,6 +30,12 @@ SCREEN_SENTINEL = b"\xa5" * (96 * 16)
 RING_SENTINEL = b"\xa5" * 80
 
 
+def cpu_ticks(pid):
+    text = Path(f"/proc/{pid}/stat").read_text()
+    fields = text[text.rfind(")") + 2:].split()
+    return int(fields[11]) + int(fields[12])
+
+
 def wait_for(predicate, message, timeout=8.0):
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
@@ -223,6 +229,32 @@ class PackTests(unittest.TestCase):
         self.assert_clean(text)
         self.assertEqual(process.returncode, 0, text)
         self.assertEqual(stdout, b"")
+        self.assert_screen_written()
+        self.assert_ring_untouched()
+
+    def test_audio_pipe_hup_does_not_spin(self):
+        read_fd, write_fd = os.pipe()
+        os.set_inheritable(read_fd, True)
+        os.close(write_fd)  # writer gone before the plugin starts: POLLHUP, no POLLIN
+        try:
+            with self.log_path.open("wb") as log:
+                process = subprocess.Popen(
+                    self.args("visualizer", "--duration-ms", "1200", "--fps", "2",
+                              "--audio-fd", str(read_fd)),
+                    stdout=subprocess.PIPE, stderr=log, env=self.env(), pass_fds=(read_fd,))
+                wait_for(lambda: Path(f"/proc/{process.pid}").exists(), "visualizer started")
+                time.sleep(0.2)
+                start = cpu_ticks(process.pid)
+                time.sleep(0.6)
+                used = cpu_ticks(process.pid) - start
+                stdout, _ = process.communicate(timeout=15)
+        finally:
+            os.close(read_fd)
+        text = self.log_path.read_text(errors="replace")
+        self.assert_clean(text)
+        self.assertEqual(process.returncode, 0, text)
+        self.assertEqual(stdout, b"")
+        self.assertLess(used, 10, "POLLHUP on the audio pipe burned CPU")
         self.assert_screen_written()
         self.assert_ring_untouched()
 

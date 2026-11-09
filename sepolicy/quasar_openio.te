@@ -4,12 +4,16 @@
 
 type quasar_openio, domain;
 type quasar_openio_exec, exec_type, file_type, vendor_file_type;
+type quasar_plugin, domain;
+type quasar_plugin_exec, exec_type, file_type, vendor_file_type;
+type quasar_openio_data_file, file_type, data_file_type, core_data_file_type;
 
 init_daemon_domain(quasar_openio)
 net_domain(quasar_openio)
 
 # Root daemon: signal io.sdk, create/chmod socket, access device nodes.
 allow quasar_openio self:capability { kill chown fowner dac_override dac_read_search sys_resource };
+# Add setuid/setgid only if the operator enables --plugin-uid/--plugin-gid.
 allow quasar_openio self:process signal_perms;
 allow quasar_openio self:process { fork setpgid sigkill };
 allow quasar_openio self:unix_stream_socket create_stream_socket_perms;
@@ -21,10 +25,13 @@ allow quasar_openio graphics_device:chr_file rw_file_perms;
 allow quasar_openio input_device:dir r_dir_perms;
 allow quasar_openio input_device:chr_file r_file_perms;
 
-# Socket, lock and crash-recovery journal under /data/local/tmp.
-allow quasar_openio shell_data_file:dir rw_dir_perms;
-allow quasar_openio shell_data_file:file create_file_perms;
-allow quasar_openio shell_data_file:sock_file create_file_perms;
+# Private runtime dir under /data/local/tmp: socket, lock, journal, audio token.
+# The daemon creates quasar-openio/ 0700; untrusted shell apps cannot traverse it.
+allow quasar_openio shell_data_file:dir { search write add_name remove_name getattr };
+type_transition quasar_openio shell_data_file:dir quasar_openio_data_file "quasar-openio";
+allow quasar_openio quasar_openio_data_file:dir create_dir_perms;
+allow quasar_openio quasar_openio_data_file:file create_file_perms;
+allow quasar_openio quasar_openio_data_file:sock_file create_file_perms;
 
 # /proc inventory for exact io.sdk PID/starttime/cmdline validation.
 allow quasar_openio proc:dir r_dir_perms;
@@ -44,9 +51,23 @@ allow quasar_openio node:tcp_socket node_bind;
 allow quasar_openio unreserved_port_type:tcp_socket name_bind;
 allow quasar_openio unreserved_port_type:tcp_socket name_connect;
 
-# The standard plugin is exec'd by the supervisor and stays in this domain.
-# It maps fb4 and fb5 itself, so it needs the same graphics_device access.
-allow quasar_openio quasar_openio_exec:file { getattr open read execute execute_no_trans map };
+# The supervisor reads the manifest and launches the plugin into a SEPARATE
+# confined domain. execute_no_trans is deliberately not granted.
 allow quasar_openio vendor_configs_file:dir r_dir_perms;
 allow quasar_openio vendor_configs_file:file r_file_perms;
+allow quasar_openio quasar_plugin_exec:file { getattr open read execute map };
+allow quasar_openio quasar_plugin:process transition;
+allow quasar_plugin quasar_plugin_exec:file { entrypoint open read execute map getattr };
+type_transition quasar_openio quasar_plugin_exec:process quasar_plugin;
+
+# Supervisor may TERM/KILL the plugin process group and pipe stdin/stdout/PCM.
+allow quasar_openio quasar_plugin:process { signal sigkill };
 allow quasar_openio self:fifo_file rw_file_perms;
+allow quasar_plugin quasar_openio:fd use;
+allow quasar_plugin quasar_openio:fifo_file { read write getattr };
+allow quasar_plugin self:process { setpgid sigkill };
+
+# The plugin self-draws fb4/fb5 via validated mmap. It gets no input, network,
+# SDK signal, runtime token, socket, lock or journal access.
+allow quasar_plugin graphics_device:dir search;
+allow quasar_plugin graphics_device:chr_file { open read write map getattr ioctl };

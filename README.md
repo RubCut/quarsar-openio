@@ -20,25 +20,31 @@ framebuffer, пока плагин загружен. Дополнительно 
 
 Реализовано и проверено на host:
 
-- строгая сборка GCC с `-Werror`;
+- строгая сборка GCC с `-Werror`, PIE, full RELRO/BIND_NOW, non-exec stack;
 - интеграционные тесты JSON/Unix socket, framebuffer `mmap` со stride/padding,
   input-событий, `SIGSTOP`/`SIGCONT`, восстановления после `SIGKILL` демона,
   PCM→HTTP, ограничения очередей и очистки по `SIGTERM`;
 - ASan/UBSan-прогон;
-- тесты OTA-скрипта с mock `iptables`/`ip6tables`;
+- тесты OTA-скрипта с mock `iptables`/`ip6tables`, включая отказ от чужой
+  пустой цепочки `QIO_OTA_*`;
+- тесты ELF-верификатора и rollback-транзакции установщика;
 - стандартный плагин `quasar_pack`: часы, визуализатор и 12 анимаций, экран и
   кольцо рисуются самим плагином через mmap fb4/fb5;
 - host-тесты плагина: fb4 пишется, fb5 не трогается в idle/визуализаторе,
   анимации сами рисуют и гасят кольцо, padding строк не пишется;
 - host-тесты супервизора: контракт запуска, кнопки, музыкальные переходы,
-  отказ от `draw_*` при загруженном плагине, пожинание ребёнка;
-- статическая cross-сборка ELF64 AArch64 без `INTERP` через `zig cc -target
-  aarch64-linux-musl -static` для демона и пака.
+  отказ от `draw_*` при загруженном плагине, пожинание ребёнка, закрытие
+  унаследованного fd 200, перезапуск повторной анимации;
+- регрессии аудита: 9-я IPC-команда без дополнительного ввода, idle-lease HTTP,
+  обязательная audio-аутентификация, `POLLHUP` без CPU spin, отказ `\u0000`;
+- статическая cross-сборка ELF64 AArch64 static PIE без `INTERP`/`DT_NEEDED`
+  через `zig cc -target aarch64-linux-musl -static -pie` для демона и пака.
 
 **Не проверено на реальной станции в этой среде:** Amlogic LED-драйвер,
-SELinux-домен, поведение `io.sdk` при заморозке, совместимость HTTP/WAV со штатным
-плеером, Docker-сборка и длительную работу под нагрузкой. Перед развёртыванием
-выполните чек-лист ниже.
+SELinux-домены `quasar_openio`/`quasar_plugin`, поведение `io.sdk` при заморозке,
+совместимость HTTP/WAV со штатным плеером, Docker-сборка и длительную работу под
+нагрузкой. Перед развёртыванием выполните чек-лист ниже. Карта исправлений аудита
+и принятые остаточные риски: [`docs/AUDIT.md`](docs/AUDIT.md).
 
 Вложенный `quasar-daemon-11-05.jpeg` оказался ZIP-архивом с предыдущей реализацией.
 Он был распакован и изучен как справочный материал; готовые бинарники из архива не
@@ -52,14 +58,18 @@ src/                        супервизор: main, plugin, IPC, JSON, fb, i
 pack/                       плагин: часы, визуализатор, анимации, mmap fb4+fb5
 init/quasar_openio.rc       Android init service для /odm/etc/init
 plugins/standard/plugin.conf манифест стандартного плагина
-scripts/install_odm.sh      осторожная установка в /odm, по умолчанию dry-run
+scripts/install_odm.sh      hash-pinned транзакционная установка в /odm, dry-run
+scripts/verify_aarch64.sh   read-only проверка AArch64 static PIE + SHA-256
 scripts/quasar_block_ota.sh блокировка OTA-адресов, по умолчанию dry-run
 sepolicy/                   справочная SELinux-политика, не загружается автоматически
 tools/fb_info.c             read-only probe геометрии framebuffer
 docs/PACK.md                документация стандартного плагина
-examples/                   Python-примеры клиента и PCM-отправителя
-tests/                      host-тесты,fixture-библиотека, mock iptables
-Dockerfile                  статическая сборка на arm64v8/alpine
+docs/AUDIO.md               аудио-мост, токен, таймауты, варианты интеграции
+docs/AUDIT.md               исправления аудита и остаточные риски
+examples/                   Python-примеры клиента, PCM и HTTP audio
+tests/                      host-тесты, fixture-библиотека, mock iptables
+.github/workflows/ci.yml    CI: host/sanitizers + AArch64 cross-build
+Dockerfile                  arm64v8/alpine, обязательный digest-pin base image
 ```
 
 ## Сборка
@@ -73,36 +83,34 @@ make sanitize
 make fb-info
 ```
 
-Статическая сборка через Docker, как требует ТЗ:
+Рекомендуемая cross-сборка без Docker и без privileged binfmt-контейнера:
 
 ```sh
-# На x86_64-host сначала нужен binfmt/QEMU для linux/arm64.
-docker run --privileged --rm tonistiigi/binfmt --install arm64
-docker build --platform linux/arm64 -t quasar-openio-builder .
+python3 -m pip install ziglang==0.13.0
+make aarch64
+readelf -h build/aarch64/quasar_openio | grep -E 'Type|Machine'
+readelf -l build/aarch64/quasar_openio | grep -E 'INTERP|GNU_RELRO' || true
+readelf -d build/aarch64/quasar_openio | grep -E 'NEEDED|BIND_NOW' || true
+```
+
+Ожидаемо: `DYN`, `AArch64`, нет `INTERP` и `NEEDED`, есть `GNU_RELRO` и
+`BIND_NOW`. `make static` собирает **host** static-PIE и не предназначен для
+установки на станцию; установщик по умолчанию берёт `build/aarch64/`.
+
+Docker-вариант оставлен только для native ARM64-сборки с обязательным
+digest-pin базового образа. Не запускайте непропиненный `tonistiigi/binfmt
+--privileged`; используйте distro QEMU/binfmt или `make aarch64`:
+
+```sh
+# Digest должен быть разрешён из доверенного registry и проверен оператором.
+docker build --platform linux/arm64 \
+  --build-arg ALPINE_IMAGE=arm64v8/alpine:3.22@sha256:<verified-digest> \
+  -t quasar-openio-builder .
 id=$(docker create --platform linux/arm64 quasar-openio-builder)
 docker cp "$id:/quasar_openio" ./quasar_openio
 docker cp "$id:/plugins/standard/quasar_pack" ./quasar_pack
 docker cp "$id:/plugins/standard/plugin.conf" ./plugin.conf
 docker rm "$id"
-file quasar_openio quasar_pack   # ELF 64-bit ARM aarch64, statically linked
-```
-
-Альтернативная cross-сборка без Docker, проверенная в этой среде:
-
-```sh
-python3 -m pip install ziglang==0.13.0
-mkdir -p build/aarch64
-python3 -m ziglang cc -target aarch64-linux-musl -static -std=c11 -O2 \
-  -Iinclude -Wall -Wextra -Wpedantic -Wshadow -Wformat=2 \
-  -Wconversion -Wsign-conversion -Werror src/*.c \
-  -o build/aarch64/quasar_openio
-python3 -m ziglang cc -target aarch64-linux-musl -static -std=c11 -O2 \
-  -Iinclude -Wall -Wextra -Wpedantic -Wshadow -Wformat=2 \
-  -Wconversion -Wsign-conversion -Werror \
-  pack/*.c src/util.c src/framebuffer.c src/json.c \
-  -o build/aarch64/quasar_pack
-readelf -h build/aarch64/quasar_openio build/aarch64/quasar_pack | grep Machine
-readelf -l build/aarch64/quasar_openio build/aarch64/quasar_pack | grep INTERP || true
 ```
 
 Runtime не требует Python, GStreamer, shell или динамического загрузчика.
@@ -117,17 +125,23 @@ Runtime не требует Python, GStreamer, shell или динамическ
 ```sh
 ./quasar_openio --help
 ./quasar_openio \
-  --socket /data/local/tmp/quasar.sock \
+  --socket /data/local/tmp/quasar-openio/quasar.sock \
   --socket-mode 0600 \
   --audio-port 19080 \
-  --http-port 19081
+  --http-port 19081 \
+  --audio-token-file /data/local/tmp/quasar-openio/audio.token
 ```
 
 Для проверки протокола без обращения к железу и без сигналов:
 
 ```sh
-./quasar_openio --dry-run --no-audio --socket /tmp/quasar.sock
+./quasar_openio --dry-run --no-audio --no-plugin \
+  --socket /data/local/tmp/quasar-openio/quasar.sock
 ```
+
+Родительский каталог socket/token должен быть приватным `0700` и принадлежать
+euid демона. На host без `/data` используйте `make test` или сборку с
+`-DQIO_RUNTIME_DIR=/tmp/private-dir`.
 
 `--dry-run` не открывает input/framebuffer, не пишет journal и не посылает
 `SIGSTOP`/`SIGCONT`. Loopback audio можно оставить включённым или отключить
@@ -142,7 +156,7 @@ Runtime не требует Python, GStreamer, shell или динамическ
 
 Android-приложению обычно нужен `android.net.LocalSocket`, подходящий UID/GID и
 SELinux-разрешение на подключение к socket-файлу. Один демон на устройство
-защищён `flock`-файлом `/data/local/tmp/quasar_openio.lock`.
+защищён `flock`-файлом `/data/local/tmp/quasar-openio/daemon.lock`.
 
 ## Unix JSON API
 
@@ -205,7 +219,7 @@ legacy-режим и работают **только** с `--no-plugin`. Есл�
 Пример клиента:
 
 ```sh
-python3 examples/client.py --socket /data/local/tmp/quasar.sock status
+python3 examples/client.py --socket /data/local/tmp/quasar-openio/quasar.sock status
 python3 examples/client.py pause
 python3 examples/client.py music-state playing
 python3 examples/client.py animation volume-ring
@@ -248,7 +262,7 @@ file descriptors**; одновременный вывод возможен то�
 завершается ошибкой `ambiguous_sdk_process`.
 
 Перед `SIGSTOP` пишется root-only journal
-`/data/local/tmp/quasar_openio.sdk`. После аварийного завершения демона следующий
+`/data/local/tmp/quasar-openio/sdk.journal`. После аварийного завершения демона следующий
 запуск возобновляет только тот процесс, который совпадает с journal по
 `boot_id`, PID, starttime и package. При штатном `SIGTERM`/`SIGINT` демон сам
 посылает `SIGCONT`, закрывает клиенты и устройства, удаляет socket и выходит.
@@ -297,10 +311,19 @@ quasar_pack MODE --screen /dev/graphics/fb4 --ring /dev/graphics/fb5 \
 
 ## Аудиомост
 
+Loopback **не** является границей авторизации. Демон создаёт bearer token
+`/data/local/tmp/quasar-openio/audio.token` (`0600`, владелец euid демона) и
+требует его на обоих концах:
+
+- PCM producer: первая строка `AUTH <64 hex>\n`, абсолютный handshake timeout
+  5 с; до успешного AUTH PCM не принимается и не определяется музыка;
+- HTTP: `Authorization: Bearer <64 hex>` на каждый запрос, включая `/health`;
+  неверный/дублирующийся заголовок → 401/400.
+
 Вход: TCP **только** `127.0.0.1:19080`, сырой PCM `S16LE`, 48000 Hz, 2 канала,
 frame alignment 4 байта. Один producer; второй отклоняется. Кольцевой буфер —
 262144 байта (~1.36 с). При переполнении старые кадры вытесняются, память не
-растёт. Producer без данных 30 с отключается.
+растёт. Аутентифицированный producer без данных 30 с отключается.
 
 Выход: HTTP **только** `127.0.0.1:19081`:
 
@@ -309,12 +332,13 @@ frame alignment 4 байта. Один producer; второй отклоняет
 - `GET /audio.pcm` — сырой S16LE;
 - `GET /health` — JSON-состояние аудио.
 
-Один streaming-consumer; остальные получают 503. HTTP-запросы ограничены, тело и
-pipelining запрещены. Пример отправки:
+Один streaming-consumer; остальные получают 503. Запрос должен завершиться за
+5 с; streaming-поток без реального send-прогресса 15 с освобождает слот. Тело и
+pipelining запрещены. Примеры без токена в argv:
 
 ```sh
-python3 examples/pcm_send.py audio.raw
-curl --no-buffer http://127.0.0.1:19081/audio.wav > out.wav
+python3 examples/pcm_send.py --token-file /data/local/tmp/quasar-openio/audio.token audio.raw
+python3 examples/audio_http.py --token-file /data/local/tmp/quasar-openio/audio.token --output out.wav
 ```
 
 **Это транспорт, а не доказанное внедрение в `appsrc name=stream-src`.** Объект
@@ -340,21 +364,32 @@ setprop ctl.start quasar_openio
 sh scripts/install_odm.sh --preview
 ```
 
-Применение требует явного подтверждения, что `/odm` не покрыт dm-verity/AVB:
+Применение требует явного подтверждения, что `/odm` не покрыт dm-verity/AVB,
+остановленного демона/плагина и четырёх SHA-256 pin из доверенной сборки:
 
 ```sh
+QUASAR_BINARY_SHA256=<hex> \
+QUASAR_PACK_BINARY_SHA256=<hex> \
+QUASAR_PLUGIN_CONF_SHA256=<hex> \
+QUASAR_RC_SHA256=<hex> \
 sh scripts/install_odm.sh --apply --confirm-odm-unprotected
 ```
 
-Скрипт не делает remount, не отключает verity, не меняет PackageManager и не
-запускает сервис. Он проверяет, что `/odm` — отдельный rw mount ext4/f2fs, и
-ставит контексты. **Флаг `rw` сам по себе не доказывает отсутствие verity.**
+Скрипт не делает remount, не отключает verity, не меняет PackageManager, не
+останавливает и не запускает сервис. Он проверяет AArch64 ELF64 static PIE без
+`INTERP`/`DT_NEEDED`, хэши, отдельный rw mount ext4/f2fs, отсутствие запущенного
+`quasar_openio`/`quasar_pack`, ставит контексты и выполняет файловую транзакцию
+с rollback при ошибке. **Флаг `rw` сам по себе не доказывает отсутствие verity.**
+Это не A/B-обнование, атомарное к потере питания: при прерывании остаётся
+`.install-journal` и файлы `.backup.<pid>`; следующий apply откажется работать,
+пока оператор не восстановит резервные копии вручную.
 
-RC использует домен `u:r:quasar_openio:s0`, которого нет в стоковой политике.
-Справочные файлы лежат в `sepolicy/`; они должны быть адаптированы под реальные
-контексты устройства и загружены до старта. Не используйте `setenforce 0` как
-решение. Если политика не загружена, init/демон должны fail-closed, а не работать
-в обход SELinux.
+RC использует домен `u:r:quasar_openio:s0`; плагин переходит в отдельный
+`u:r:quasar_plugin:s0` с доступом только к fb4/fb5 и pipe супервизора. Этих
+доменов нет в стоковой политике. Справочные файлы лежат в `sepolicy/`; они должны
+быть адаптированы под реальные контексты устройства и загружены до старта. Не
+используйте `setenforce 0` как решение. Если политика не загружена, init/демон
+должны fail-closed, а не работать в обход SELinux.
 
 ## Блокировка OTA
 
@@ -376,8 +411,10 @@ sh scripts/quasar_block_ota.sh --remove
 Правила ставятся в OUTPUT для IPv4 и IPv6. Если IPv6 отключён в ядре, можно явно
 использовать `--ipv4-only`; иначе отсутствие `ip6tables` считается ошибкой.
 Новая цепочка заполняется до установки jump, старая удаляется после; при ошибке
-новые цепочки откатываются. Скрипт удаляет только цепочки с маркером
-`quasar-openio-ota-v1`.
+новые цепочки откатываются. Владение доказывается маркированным jump из OUTPUT
+и непустой цепочкой, где каждое правило несёт маркер `quasar-openio-ota-v1`.
+Пустая чужая `QIO_OTA_*`, цепочка без маркированного jump или чужая ссылка на
+неё → отказ без изменений.
 
 Важное ограничение: `iptables` резолвит домены один раз. CDN-адреса меняются и
 могут быть общими с другими сервисами Яндекса. Это не постоянный DNS-фильтр.
@@ -392,7 +429,7 @@ sh scripts/quasar_block_ota.sh --apply --uid 10xxx
 ## Тесты
 
 ```sh
-make test       # GCC strict + демон + OTA mocks + плагин + супервизор
+make test       # GCC strict + демон + OTA/install mocks + плагин + супервизор
 make sanitize   # ASan/UBSan для всех наборов
 ```
 
@@ -406,25 +443,32 @@ make sanitize   # ASan/UBSan для всех наборов
 - PID/starttime/cmdline при pause/resume и crash recovery;
 - bounded audio overflow и slow-client disconnect;
 - отсутствие `system()`/`popen()` и framebuffer `write()` в production-коде;
-- rollback OTA-правил и отказ от flush чужих цепочек;
+- rollback OTA-правил и отказ от flush чужих/пустых цепочек;
+- ELF-верификатор: wrong arch, non-PIE, INTERP, DT_NEEDED, hash mismatch;
+- транзакция установщика: commit, rollback, interrupted journal, symlink;
 - плагин сам пишет fb4 и fb5, idle/визуализатор не трогают кольцо, анимация
   гасит кольцо при выходе, padding строк не пишется, отказ при неверной геометрии;
 - супервизор передаёт пути обоих устройств и `--no-ring` для idle, не пишет в
-  fb5 сам, отклоняет `draw_*`, отрабатывает музыкальные переходы и кнопки.
+  fb5 сам, отклоняет `draw_*`, отрабатывает музыкальные переходы и кнопки,
+  закрывает fd 200 и перезапускает повторную анимацию с полной длительностью.
 
 ## Чек-лист перед развёртыванием на станции
 
 1. Сделать read-only inventory: `getevent -lp`, `ls -Z /dev/input/event*
    /dev/graphics/fb*`, `ps -Z | grep com.yandex.io.sdk`, состояние mounts/verity.
-2. Собрать статические AArch64-бинарники демона и плагина, проверить `readelf -h/-l`.
+2. Собрать `make aarch64`, проверить `readelf -h/-l/-d` и SHA-256; сохранить
+   доверенные pins для установщика.
 3. Проверить `fb_info` для fb4/fb5 без записи.
 4. Запустить `--dry-run --no-audio` и проверить JSON-клиентом команды/ошибки.
-5. Адаптировать и загрузить SELinux-политику; убедиться, что нет permissive-обхода.
-6. Установить в `/odm` только после независимой проверки verity-покрытия.
+5. Адаптировать и загрузить SELinux-политику с отдельным `quasar_plugin`;
+   убедиться, что нет permissive-обхода и `execute_no_trans`.
+6. Остановить демон/плагин, проверить резервный план восстановления `/odm`,
+   установить только после независимой проверки verity-покрытия и pins.
 7. Первый реальный кадр выводить после `pause_sdk`, с минимальной яркостью;
    сразу проверить `resume_sdk`, кнопки, микрофоны и отсутствие kernel warnings.
-8. Отдельно проверить audio-потребителя: штатный плеер может не принять
-   streaming WAV; при необходимости использовать архитектуру из `docs/AUDIO.md`.
+8. Отдельно проверить audio-токен/таймауты и потребителя: штатный плеер может не
+   принять streaming WAV; при необходимости использовать архитектуру из
+   `docs/AUDIO.md`.
 9. Провести soak-тест с ограничением логов и наблюдением за memory/fd count.
 
 ## Лицензия

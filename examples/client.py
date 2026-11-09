@@ -23,7 +23,7 @@ def response(sock):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--socket", default="/data/local/tmp/quasar.sock")
+    parser.add_argument("--socket", default="/data/local/tmp/quasar-openio/quasar.sock")
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("status")
     sub.add_parser("pause")

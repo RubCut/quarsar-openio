@@ -1,0 +1,73 @@
+name: CI
+
+on:
+  push:
+    branches: [main, "arena/**"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  host:
+    name: Host tests and sanitizers
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Build
+        run: make -j4
+      - name: Tests
+        run: make test
+      - name: ASan/UBSan
+        run: make sanitize
+      - name: Shell lint
+        run: |
+          python3 -m venv .venv-tools
+          .venv-tools/bin/pip install shellcheck-py==0.10.0.1
+          .venv-tools/bin/shellcheck -s sh scripts/*.sh
+      - name: Python compile
+        run: python3 -m py_compile examples/*.py tests/*.py
+      - name: Host ELF hardening
+        run: |
+          set -eu
+          for f in build/quasar_openio build/quasar_pack; do
+            readelf -h "$f" | grep -q 'DYN (Position-Independent Executable file)'
+            readelf -lW "$f" | grep -q GNU_RELRO
+            readelf -d "$f" | grep -q BIND_NOW
+            readelf -lW "$f" | grep 'GNU_STACK' | grep -q ' RW '
+          done
+
+  aarch64:
+    name: Static AArch64 cross-build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Install pinned Zig
+        run: |
+          python3 -m venv .venv-zig
+          .venv-zig/bin/pip install ziglang==0.13.0
+      - name: Cross-build
+        run: make aarch64 ZIG=".venv-zig/bin/python -m ziglang"
+      - name: Verify ELF and hashes
+        run: |
+          set -eu
+          for f in build/aarch64/quasar_openio build/aarch64/quasar_pack; do
+            readelf -h "$f" | grep -q 'DYN (Position-Independent Executable file)'
+            readelf -h "$f" | grep -q 'Machine:.*AArch64'
+            readelf -lW "$f" | grep -q GNU_RELRO
+            readelf -d "$f" | grep -q BIND_NOW
+            if readelf -lW "$f" | grep -q INTERP; then exit 1; fi
+            if readelf -d "$f" | grep -q NEEDED; then exit 1; fi
+            hash=$(sha256sum "$f" | cut -d' ' -f1)
+            sh scripts/verify_aarch64.sh "$f" "$hash"
+          done
+          (cd build/aarch64 && sha256sum quasar_openio quasar_pack > SHA256SUMS)
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: quasar-openio-aarch64
+          path: |
+            build/aarch64/quasar_openio
+            build/aarch64/quasar_pack
+            build/aarch64/SHA256SUMS
+          retention-days: 14

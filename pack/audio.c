@@ -20,13 +20,21 @@ void pack_audio_event(pack_state *state, short revents)
     pack_audio *audio = &state->audio;
     if (audio->fd < 0 || audio->eof) return;
     if ((revents & POLLNVAL) != 0) { audio->eof = true; return; }
-    if ((revents & POLLIN) == 0) return;
+    bool hung_up = (revents & (POLLERR | POLLHUP)) != 0;
+    if ((revents & POLLIN) == 0 && !hung_up) return;
+    /* Drain a bounded quantum. On HUP the writer is gone, but buffered PCM may
+     * still be readable, so read before declaring EOF. */
     uint8_t buffer[4096];
-    ssize_t count = read(audio->fd, buffer, sizeof(buffer));
-    if (count < 0 && (errno == EAGAIN || errno == EINTR)) return;
-    if (count <= 0) { audio->eof = true; return; }
-    pack_visualizer_feed(state, buffer, (size_t)count);
-    if ((revents & (POLLERR | POLLHUP)) != 0) audio->eof = true;
+    for (unsigned i = 0; i < 8; ++i) {
+        ssize_t count = read(audio->fd, buffer, sizeof(buffer));
+        if (count < 0 && errno == EINTR) continue;
+        if (count < 0 && errno == EAGAIN) break;
+        if (count <= 0) { audio->eof = true; return; }
+        pack_visualizer_feed(state, buffer, (size_t)count);
+    }
+    /* HUP/ERR must set EOF even when POLLIN is absent: otherwise poll() keeps
+     * returning immediately on a dead fd and the loop burns 100% CPU. */
+    if (hung_up) audio->eof = true;
 }
 
 void pack_audio_close(pack_state *state)

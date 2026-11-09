@@ -7,6 +7,46 @@
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
+#include <sys/stat.h>
+
+
+/* Root state must not live directly in the shell-writable /data/local/tmp.
+ * Create/validate a private 0700 directory owned by this euid. Existing
+ * directories are never chmod/chown-ed: an unsafe setup fails closed. */
+static int private_dir(const char *path)
+{
+    struct stat st;
+    if (lstat(path, &st) != 0) return -1;
+    if (!S_ISDIR(st.st_mode) || st.st_uid != geteuid() || (st.st_mode & 0777) != 0700)
+        return -1;
+    return 0;
+}
+
+int qio_runtime_prepare(void)
+{
+    if (mkdir(QIO_RUNTIME_DIR, 0700) != 0 && errno != EEXIST) {
+        qio_log("runtime dir %s: %s", QIO_RUNTIME_DIR, strerror(errno));
+        return -1;
+    }
+    if (private_dir(QIO_RUNTIME_DIR) != 0) {
+        qio_log("unsafe runtime dir %s; expected owner=%ld mode=0700, no symlink",
+                QIO_RUNTIME_DIR, (long)geteuid());
+        return -1;
+    }
+    return 0;
+}
+
+int qio_private_parent(const char *path)
+{
+    char parent[QIO_PLUGIN_PATH_MAX];
+    size_t length = strlen(path);
+    if (length == 0 || length >= sizeof(parent)) return -1;
+    memcpy(parent, path, length + 1);
+    char *slash = strrchr(parent, '/');
+    if (slash == NULL) return -1;
+    if (slash == parent) slash[1] = '\0'; else *slash = '\0';
+    return private_dir(parent);
+}
 
 static volatile sig_atomic_t stop_requested;
 static int signal_pipe[2] = {-1, -1};

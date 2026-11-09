@@ -12,7 +12,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
-#define QIO_VERSION "0.1.0"
+#define QIO_VERSION "0.2.0"
 #define QIO_MAX_CLIENTS 8
 #define QIO_REQUEST_MAX 4096
 #define QIO_RESPONSE_MAX 8192
@@ -31,15 +31,19 @@
 #define QIO_AUDIO_FRAME_BYTES 4
 #define QIO_HTTP_CLIENTS 4
 #define QIO_AUDIO_POLL_MAX (2 + 1 + QIO_HTTP_CLIENTS)
+#define QIO_AUDIO_TOKEN_HEX 64
 #define QIO_PLUGIN_PATH_MAX 256
 #define QIO_PLUGIN_MODE_MAX 32
 #define QIO_PLUGIN_REQUIRED_ANIMATIONS 7
 
+#ifndef QIO_RUNTIME_DIR
+#define QIO_RUNTIME_DIR "/data/local/tmp/quasar-openio"
+#endif
 #ifndef QIO_SOCKET_PATH
-#define QIO_SOCKET_PATH "/data/local/tmp/quasar.sock"
+#define QIO_SOCKET_PATH QIO_RUNTIME_DIR "/quasar.sock"
 #endif
 #ifndef QIO_LOCK_PATH
-#define QIO_LOCK_PATH "/data/local/tmp/quasar_openio.lock"
+#define QIO_LOCK_PATH QIO_RUNTIME_DIR "/daemon.lock"
 #endif
 #ifndef QIO_SCREEN_PATH
 #define QIO_SCREEN_PATH "/dev/graphics/fb4"
@@ -63,7 +67,10 @@
 #define QIO_SDK_PACKAGE "com.yandex.io.sdk"
 #endif
 #ifndef QIO_SDK_JOURNAL_PATH
-#define QIO_SDK_JOURNAL_PATH "/data/local/tmp/quasar_openio.sdk"
+#define QIO_SDK_JOURNAL_PATH QIO_RUNTIME_DIR "/sdk.journal"
+#endif
+#ifndef QIO_AUDIO_TOKEN_PATH
+#define QIO_AUDIO_TOKEN_PATH QIO_RUNTIME_DIR "/audio.token"
 #endif
 #ifndef QIO_PLUGIN_DIR
 #define QIO_PLUGIN_DIR "/odm/lib/quasar/plugins/standard"
@@ -138,6 +145,14 @@ typedef struct {
     int pcm_port;
     int http_port;
     int64_t pcm_deadline_ms;
+    char token[QIO_AUDIO_TOKEN_HEX + 1];
+    char token_path[256];
+    struct stat token_identity;
+    bool token_file_created;
+    bool pcm_authed;
+    uint8_t auth_line[QIO_AUDIO_TOKEN_HEX + 16];
+    size_t auth_used;
+    uint64_t auth_failures;
     uint64_t accepted_bytes;
     uint64_t dropped_bytes;
     uint64_t rejected_producers;
@@ -160,9 +175,13 @@ typedef struct {
     int audio_port;
     int http_port;
     bool no_audio;
+    const char *audio_token_file;
     bool dry_run;
     bool no_plugin;
     const char *plugin_dir;
+    bool plugin_uid_set;
+    uid_t plugin_uid;
+    gid_t plugin_gid;
 } qio_options;
 
 enum qio_plugin_music_state { QIO_PLUGIN_MUSIC_STOPPED, QIO_PLUGIN_MUSIC_PLAYING, QIO_PLUGIN_MUSIC_PAUSED };
@@ -187,6 +206,7 @@ typedef struct {
     bool explicit_music;
     char overlay[QIO_PLUGIN_MODE_MAX];
     bool overlay_active;
+    bool overlay_relaunch;
     int64_t overlay_deadline_ms;
     uint64_t launches;
     uint64_t stdout_bytes;
@@ -266,12 +286,17 @@ void qio_inputs_read(qio_app *app, size_t index);
 void qio_inputs_close(qio_app *app);
 
 /* ipc.c */
+int qio_runtime_prepare(void);
+int qio_private_parent(const char *path);
+int qio_runtime_prepare(void);
+int qio_private_parent(const char *path);
 int qio_lock_acquire(qio_app *app);
 void qio_lock_release(qio_app *app);
 int qio_ipc_init(qio_app *app);
 void qio_ipc_accept(qio_app *app, int64_t now);
 void qio_ipc_client_event(qio_app *app, size_t index, short revents, int64_t now);
 void qio_ipc_tick(qio_app *app, int64_t now);
+bool qio_ipc_has_pending(const qio_app *app);
 void qio_ipc_close(qio_app *app);
 void qio_broadcast(qio_app *app, const char *json);
 void qio_broadcast_button(qio_app *app, const char *event,

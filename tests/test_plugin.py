@@ -34,6 +34,7 @@ MOCK_C = r'''
 #include <time.h>
 #include <string.h>
 #include <unistd.h>
+#include <fcntl.h>
 int main(int argc, char **argv)
 {
     if (argc < 2) return 2;
@@ -45,6 +46,7 @@ int main(int argc, char **argv)
         fprintf(f, "argv");
         for (int i = 2; i < argc; ++i) fprintf(f, " %s", argv[i]);
         fprintf(f, "\n");
+        fprintf(f, "fd200 %s\n", fcntl(200, F_GETFD) < 0 ? "closed" : "open");
         fclose(f);
     }
     if (strcmp(mode, "clock") == 0) {
@@ -60,7 +62,10 @@ int main(int argc, char **argv)
         while (fgets(line, sizeof(line), stdin)) {}
         return 0;
     }
-    struct timespec ts = {0, 350000000};
+    unsigned long ms = 350;
+    for (int i = 2; i + 1 < argc; ++i)
+        if (strcmp(argv[i], "--duration-ms") == 0) ms = strtoul(argv[i + 1], NULL, 10);
+    struct timespec ts = {(time_t)(ms / 1000), (long)(ms % 1000) * 1000000L};
     nanosleep(&ts, NULL);
     return 0;
 }
@@ -139,7 +144,8 @@ class PluginTests(unittest.TestCase):
                    f"-DQIO_PANEL_PATH=\"{paths['panel']}\"", f"-DQIO_ROTARY_PATH=\"{paths['rotary']}\"",
                    f"-DQIO_REMOTE_PATH=\"{paths['remote']}\"", f"-DQIO_LOCK_PATH=\"{paths['daemon.lock']}\"",
                    f"-DQIO_SDK_JOURNAL_PATH=\"{paths['sdk.journal']}\"", f"-DQIO_PROC_ROOT=\"{paths['proc']}\"",
-                   f"-DQIO_SOCKET_PATH=\"{cls.root / 'default.sock'}\""]
+                   f"-DQIO_SOCKET_PATH=\"{cls.root / 'default.sock'}\"",
+                   f"-DQIO_RUNTIME_DIR=\"{cls.root}\""]
         sources = [str(p) for p in sorted((ROOT / "src").glob("*.c"))]
         subprocess.run([cc, *flags, *defines, "-Iinclude", *sources, "-o", str(cls.binary)],
                        cwd=ROOT, check=True)
@@ -150,7 +156,7 @@ class PluginTests(unittest.TestCase):
 
     def setUp(self):
         self.dir = self.root / self._testMethodName
-        self.dir.mkdir()
+        self.dir.mkdir(mode=0o700)
         self.plugin_dir = self.dir / "standard"
         self.plugin_dir.mkdir(mode=0o700)
         self.binary_path = self.plugin_dir / "mock_plugin"
@@ -169,6 +175,7 @@ class PluginTests(unittest.TestCase):
                         for name in ["panel", "rotary", "remote"]}
         self.mock_log = self.dir / "mock.log"
         self.socket_path = self.dir / "q.sock"
+        self.token_path = self.dir / "audio.token"
         self.log_path = self.dir / "daemon.log"
         self.log = self.log_path.open("wb")
         preload = f"{self.asan}:{self.fixture}" if self.asan else str(self.fixture)
@@ -187,11 +194,21 @@ class PluginTests(unittest.TestCase):
         self.http_port = free_port()
         args = [str(self.binary), "--socket", str(self.socket_path),
                 "--plugin-dir", str(self.plugin_dir),
+                "--audio-token-file", str(self.token_path),
                 "--audio-port", str(self.pcm_port), "--http-port", str(self.http_port)]
-        self.process = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=self.log, env=env)
+        # A descriptor above the old 3..127 sweep must not reach the plugin.
+        self.high_fd = os.open(os.devnull, os.O_RDONLY)
+        if self.high_fd != 200:
+            os.dup2(self.high_fd, 200)
+            os.close(self.high_fd)
+            self.high_fd = 200
+        os.set_inheritable(200, True)
+        self.process = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=self.log,
+                                        env=env, pass_fds=(200,))
         wait_for(lambda: self.socket_path.exists() and
                  "IPC listening" in self.log_path.read_text(errors="replace"), "daemon startup")
         wait_for(lambda: self.status()["plugin"]["child_mode"] == "clock", "idle clock launch")
+        self.token = self.token_path.read_text().strip()
 
     def tearDown(self):
         if self.process.poll() is None:
@@ -200,6 +217,7 @@ class PluginTests(unittest.TestCase):
         self.log.close()
         for fd in self.writers.values():
             os.close(fd)
+        os.close(200)
         text = self.log_path.read_text(errors="replace")
         self.assertNotIn("AddressSanitizer", text)
         self.assertNotIn("runtime error:", text)
@@ -218,6 +236,7 @@ class PluginTests(unittest.TestCase):
         self.assertGreater(status["child_pid"], 0)
         wait_for(lambda: "clock" in self.mock_lines(), "idle plugin logged its launch")
         lines = self.mock_lines()
+        self.assertIn("fd200 closed", lines, "inherited high descriptor leaked to plugin")
         argv = next(line for line in lines if line.startswith("argv "))
         self.assertIn(f"--screen {self.fb4}", argv)
         self.assertIn(f"--ring {self.fb5}", argv)
@@ -272,6 +291,7 @@ class PluginTests(unittest.TestCase):
             chunk = bytearray()
             for i in range(4096):
                 chunk.extend(struct.pack("<hh", 12000, 12000))
+            sock.sendall(f"AUTH {self.token}\n".encode())
             sock.sendall(chunk)
             wait_for(lambda: self.status()["plugin"]["music_state"] == "playing", "auto playing")
             wait_for(lambda: self.status()["plugin"]["child_mode"] == "visualizer", "auto visualizer")
@@ -294,6 +314,28 @@ class PluginTests(unittest.TestCase):
         wait_for(lambda: "mic-on" in self.mock_lines(), "mic-on overlay")
         os.write(self.writers["panel"], input_event(5, 14, 1) + input_event(0, 0, 0))
         wait_for(lambda: "mic-off" in self.mock_lines(), "mic-off overlay")
+
+    def test_repeated_animation_restarts_child_with_full_duration(self):
+        self.assertEqual(command(self.socket_path, {"action": "plugin_animation", "data": "volume-up"}),
+                         {"ok": True})
+        wait_for(lambda: "volume-up" in self.mock_lines(), "first volume-up launch")
+        first_pid = self.status()["plugin"]["child_pid"]
+        launches = self.status()["plugin"]["launches"]
+        self.assertEqual(command(self.socket_path, {"action": "plugin_animation", "data": "volume-up"}),
+                         {"ok": True})
+        wait_for(lambda: self.mock_lines().count("volume-up") >= 2, "repeated animation relaunched")
+        wait_for(lambda: self.status()["plugin"]["launches"] > launches, "restart counted")
+        second_pid = self.status()["plugin"]["child_pid"]
+        self.assertNotEqual(first_pid, second_pid)
+        argv = [line for line in self.mock_lines() if line.startswith("argv ")][-1]
+        self.assertIn("--duration-ms 900", argv)
+        wait_for(lambda: self.status()["plugin"]["child_mode"] == "clock", "clock after repeated overlay")
+
+    def test_plugin_privilege_options_require_pair(self):
+        for args in (["--plugin-uid", "65534"], ["--plugin-gid", "65534"],
+                     ["--plugin-uid", "0", "--plugin-gid", "65534"]):
+            result = subprocess.run([str(self.binary), *args], capture_output=True, timeout=3)
+            self.assertEqual(result.returncode, 2)
 
     def test_shutdown_reaps_child(self):
         pid = self.status()["plugin"]["child_pid"]

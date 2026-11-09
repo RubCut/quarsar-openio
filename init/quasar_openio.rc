@@ -2,7 +2,7 @@
 # Install as /odm/etc/init/quasar_openio.rc
 # Required file label: u:object_r:vendor_configs_file:s0
 # The custom SELinux domain must already be loaded. Never use setenforce 0.
-service quasar_openio /odm/bin/quasar_openio --socket /data/local/tmp/quasar.sock --socket-mode 0600 --audio-port 19080 --http-port 19081 --plugin-dir /odm/lib/quasar/plugins/standard
+service quasar_openio /odm/bin/quasar_openio --socket /data/local/tmp/quasar-openio/quasar.sock --socket-mode 0600 --audio-port 19080 --http-port 19081 --audio-token-file /data/local/tmp/quasar-openio/audio.token --plugin-dir /odm/lib/quasar/plugins/standard
     class late_start
     user root
     group root input graphics inet audio
@@ -16,6 +16,8 @@ service quasar_openio /odm/bin/quasar_openio --socket /data/local/tmp/quasar.soc
 on property:sys.boot_completed=1
     start quasar_openio
 
+# Optional DAC drop: add --plugin-uid/--plugin-gid only after verifying the
+# plugin can still open fb4/fb5 with that uid/gid. SELinux confinement is mandatory.
 # The supervisor launches /odm/lib/quasar/plugins/standard/quasar_pack itself.
 # There is no separate pack service: the plugin draws fb4 and fb5 on its own.
 # oneshot deliberately prevents an init restart loop if hardware access fails.
