@@ -33,9 +33,9 @@ jobs:
           set -eu
           for f in build/quasar_openio build/quasar_pack; do
             readelf -h "$f" | grep -q 'DYN (Position-Independent Executable file)'
-            readelf -l "$f" | grep -q GNU_RELRO
+            readelf -lW "$f" | grep -q GNU_RELRO
             readelf -d "$f" | grep -q BIND_NOW
-            readelf -l "$f" | grep -q 'GNU_STACK.*RW '
+            readelf -lW "$f" | grep 'GNU_STACK' | grep -q ' RW '
           done
 
   aarch64:
@@ -55,9 +55,9 @@ jobs:
           for f in build/aarch64/quasar_openio build/aarch64/quasar_pack; do
             readelf -h "$f" | grep -q 'DYN (Position-Independent Executable file)'
             readelf -h "$f" | grep -q 'Machine:.*AArch64'
-            readelf -l "$f" | grep -q GNU_RELRO
+            readelf -lW "$f" | grep -q GNU_RELRO
             readelf -d "$f" | grep -q BIND_NOW
-            if readelf -l "$f" | grep -q INTERP; then exit 1; fi
+            if readelf -lW "$f" | grep -q INTERP; then exit 1; fi
             if readelf -d "$f" | grep -q NEEDED; then exit 1; fi
             hash=$(sha256sum "$f" | cut -d' ' -f1)
             sh scripts/verify_aarch64.sh "$f" "$hash"
