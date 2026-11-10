@@ -285,7 +285,11 @@ class PluginTests(unittest.TestCase):
             chunk = bytearray()
             for i in range(4096):
                 chunk.extend(struct.pack("<hh", 12000, 12000))
-            sock.sendall(chunk)
+            # Pace small writes like a real PCM producer; host-only loopback
+            # stacks may drop an unpaced 16 KiB burst.
+            for offset in range(0, len(chunk), 4096):
+                sock.sendall(chunk[offset:offset + 4096])
+                time.sleep(0.005)
             wait_for(lambda: self.status()["plugin"]["music_state"] == "playing", "auto playing")
             wait_for(lambda: self.status()["plugin"]["child_mode"] == "visualizer", "auto visualizer")
         wait_for(lambda: self.status()["plugin"]["music_state"] == "stopped", "auto stopped", timeout=6)

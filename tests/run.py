@@ -85,8 +85,14 @@ def read_exact(sock: socket.socket, count: int, initial: bytes = b"") -> bytes:
     return bytes(data)
 
 
-def http_get(port: int, path: str):
-    sock = socket.create_connection(("127.0.0.1", port), timeout=3)
+def http_get(port: int, path: str, rcvbuf: int | None = None):
+    sock = socket.socket()
+    sock.settimeout(3)
+    if rcvbuf is not None:
+        # Must be set before connect so the advertised window is small. Some
+        # host-only loopback stacks drop an unpaced 256 KiB server burst.
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, rcvbuf)
+    sock.connect(("127.0.0.1", port))
     sock.sendall(f"GET {path} HTTP/1.1\r\nHost: localhost\r\n\r\n".encode())
     return sock, *http_header(sock)
 
@@ -308,12 +314,20 @@ def integration(binary: Path, fixture: Path, root: Path, sanitize: bool = False)
                  "second producer rejection")
         extra_producer.close()
         total = bytes(range(256)) * 1600  # 409600 bytes > 262144-byte ring
-        pcm.sendall(total)
-        status = wait_for(lambda: (lambda s: s if s["audio"]["dropped_bytes"] > 0 else None)(
+        # Real PCM producers write small buffers. Pacing the upload also keeps
+        # host-only loopback buffers from dropping a single large burst.
+        for offset in range(0, len(total), 4096):
+            pcm.sendall(total[offset:offset + 4096])
+            time.sleep(0.005)
+        status = wait_for(lambda: (lambda s: s if s["audio"]["dropped_bytes"] > 0 and
+                                   # Wait until the whole producer burst has been
+                                   # ingested so the ring snapshot cannot change
+                                   # while the HTTP consumer is reading it.
+                                   s["audio"]["accepted_bytes"] >= 4096 + len(total) else None)(
             command(socket_path, {"action": "status"})), "bounded audio overflow")
         assert status["audio"]["buffered_bytes"] <= 262144
         assert status["audio"]["buffered_bytes"] % 4 == 0
-        consumer, headers, extra = http_get(daemon.http_port, "/audio.wav")
+        consumer, headers, extra = http_get(daemon.http_port, "/audio.wav", rcvbuf=8192)
         buffered = status["audio"]["buffered_bytes"]
         body = read_exact(consumer, buffered, extra[44:])
         assert body == total[-buffered:]
