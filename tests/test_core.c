@@ -93,7 +93,10 @@ static void test_framebuffer(void)
     assert(qio_fb_validate(&fix, &var, 25, 16, &fb) != 0);
     geometry(&fix, &var); var.blue.offset = var.red.offset;
     assert(qio_fb_validate(&fix, &var, 25, 16, &fb) != 0);
+    /* fb4 on yandexstation_2 reports grayscale=1 with a valid RGB888 layout. */
     geometry(&fix, &var); var.grayscale = 1;
+    assert(qio_fb_validate(&fix, &var, 25, 16, &fb) == 0);
+    var.blue.offset = var.red.offset;
     assert(qio_fb_validate(&fix, &var, 25, 16, &fb) != 0);
     geometry(&fix, &var); fix.smem_len = 0;
     assert(qio_fb_validate(&fix, &var, 25, 16, &fb) != 0);

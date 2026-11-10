@@ -29,7 +29,10 @@ int qio_fb_validate(const struct fb_fix_screeninfo *fixed,
         fixed->smem_len > 16U * 1024U * 1024U ||
         variable->xres != width || variable->yres != height ||
         variable->xres_virtual < width || variable->yres_virtual < height ||
-        variable->bits_per_pixel != 24 || variable->grayscale != 0 ||
+        variable->bits_per_pixel != 24 ||
+        /* The station's fb4 reports grayscale=1 even though it provides a
+         * normal RGB888 layout. The distinct RGB byte offsets below are the
+         * authoritative format check. */
         variable->rotate != 0 ||
         variable->red.length != 8 || variable->green.length != 8 ||
         variable->blue.length != 8 || variable->transp.length != 0 ||
