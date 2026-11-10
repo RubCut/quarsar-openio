@@ -32,8 +32,8 @@ framebuffer, пока плагин загружен. Дополнительно 
   анимации сами рисуют и гасят кольцо, padding строк не пишется;
 - host-тесты супервизора: контракт запуска, кнопки, музыкальные переходы,
   отказ от `draw_*` при загруженном плагине, пожинание ребёнка;
-- статическая cross-сборка ELF64 AArch64 без `INTERP` через `zig cc -target
-  aarch64-linux-musl -static` для демона и пака.
+- статическая PIE cross-сборка ELF64 AArch64 без `INTERP` через `zig cc -target
+  aarch64-linux-musl -static-pie` для демона и пака.
 
 **Не проверено на реальной станции в этой среде:** Amlogic LED-драйвер,
 SELinux-домен, поведение `io.sdk` при заморозке, совместимость HTTP/WAV со штатным
@@ -77,14 +77,17 @@ make fb-info
 
 ```sh
 # На x86_64-host сначала нужен binfmt/QEMU для linux/arm64.
-docker run --privileged --rm tonistiigi/binfmt --install arm64
+docker run --privileged --rm \
+  tonistiigi/binfmt@sha256:400a4873b838d1b89194d982c45e5fb3cda4593fbfd7e08a02e76b03b21166f0 \
+  --install arm64
 docker build --platform linux/arm64 -t quasar-openio-builder .
 id=$(docker create --platform linux/arm64 quasar-openio-builder)
-docker cp "$id:/quasar_openio" ./quasar_openio
-docker cp "$id:/plugins/standard/quasar_pack" ./quasar_pack
-docker cp "$id:/plugins/standard/plugin.conf" ./plugin.conf
+mkdir -p build/aarch64
+docker cp "$id:/quasar_openio" ./build/aarch64/quasar_openio
+docker cp "$id:/plugins/standard/quasar_pack" ./build/aarch64/quasar_pack
 docker rm "$id"
-file quasar_openio quasar_pack   # ELF 64-bit ARM aarch64, statically linked
+file build/aarch64/quasar_openio build/aarch64/quasar_pack
+# Оба файла: ELF 64-bit ARM aarch64, statically linked.
 ```
 
 Альтернативная cross-сборка без Docker, проверенная в этой среде:
@@ -92,13 +95,15 @@ file quasar_openio quasar_pack   # ELF 64-bit ARM aarch64, statically linked
 ```sh
 python3 -m pip install ziglang==0.13.0
 mkdir -p build/aarch64
-python3 -m ziglang cc -target aarch64-linux-musl -static -std=c11 -O2 \
+python3 -m ziglang cc -target aarch64-linux-musl -static-pie -fPIE -std=c11 -O2 \
   -Iinclude -Wall -Wextra -Wpedantic -Wshadow -Wformat=2 \
-  -Wconversion -Wsign-conversion -Werror src/*.c \
+  -Wconversion -Wsign-conversion -Werror -fstack-protector-strong \
+  -D_FORTIFY_SOURCE=2 -Wl,-z,relro,-z,now,-z,noexecstack src/*.c \
   -o build/aarch64/quasar_openio
-python3 -m ziglang cc -target aarch64-linux-musl -static -std=c11 -O2 \
+python3 -m ziglang cc -target aarch64-linux-musl -static-pie -fPIE -std=c11 -O2 \
   -Iinclude -Wall -Wextra -Wpedantic -Wshadow -Wformat=2 \
-  -Wconversion -Wsign-conversion -Werror \
+  -Wconversion -Wsign-conversion -Werror -fstack-protector-strong \
+  -D_FORTIFY_SOURCE=2 -Wl,-z,relro,-z,now,-z,noexecstack \
   pack/*.c src/util.c src/framebuffer.c src/json.c \
   -o build/aarch64/quasar_pack
 readelf -h build/aarch64/quasar_openio build/aarch64/quasar_pack | grep Machine
@@ -270,6 +275,11 @@ file descriptors**; одновременный вывод возможен то�
 через один и тот же валидатор геометрии и `stride`. Никакой ретрансляции кадров
 через демон нет.
 
+Плагины считаются доверенными и намеренно работают с root UID в том же
+SELinux-домене, что и демон: прямой доступ к экрану, кольцу и другим устройствам
+является частью плагинного контракта. Root не отменяет SELinux enforcing, поэтому
+доступ к device nodes всё равно должен быть явно разрешён политикой.
+
 ```text
 quasar_pack MODE --screen /dev/graphics/fb4 --ring /dev/graphics/fb5 \
   --fps 30 --brightness 64 --duration-ms 900 [--audio-fd 3] [--no-ring]
@@ -301,6 +311,10 @@ quasar_pack MODE --screen /dev/graphics/fb4 --ring /dev/graphics/fb5 \
 frame alignment 4 байта. Один producer; второй отклоняется. Кольцевой буфер —
 262144 байта (~1.36 с). При переполнении старые кадры вытесняются, память не
 растёт. Producer без данных 30 с отключается.
+
+Loopback не аутентифицирует Android UID. До отдельного Unix socket с
+`SO_PEERCRED` порты нужно ограничивать SELinux-политикой доверенного клиента или
+отключать через `--no-audio`; подробнее в [`docs/AUDIO.md`](docs/AUDIO.md).
 
 Выход: HTTP **только** `127.0.0.1:19081`:
 
@@ -348,7 +362,13 @@ sh scripts/install_odm.sh --apply --confirm-odm-unprotected
 
 Скрипт не делает remount, не отключает verity, не меняет PackageManager и не
 запускает сервис. Он проверяет, что `/odm` — отдельный rw mount ext4/f2fs, и
-ставит контексты. **Флаг `rw` сам по себе не доказывает отсутствие verity.**
+ставит контексты. Перед preview/apply он также проверяет через `readelf`, что
+оба бинарника — статические ELF64 AArch64 без `INTERP`; по умолчанию берутся
+`build/aarch64/quasar_openio` и `build/aarch64/quasar_pack`. **Флаг `rw` сам по
+себе не доказывает отсутствие verity.** Работающий сервис перед заменой файлов
+нужно остановить. Файлы сначала staging-уются, старые версии сохраняются до
+`sync`, а при ошибке команд выполняется rollback. Оставшиеся `.old`/`.new`
+означают прерванную установку и требуют ручной проверки перед повтором.
 
 RC использует домен `u:r:quasar_openio:s0`, которого нет в стоковой политике.
 Справочные файлы лежат в `sepolicy/`; они должны быть адаптированы под реальные
@@ -404,11 +424,15 @@ make sanitize   # ASan/UBSan для всех наборов
 - canonical base64 и точные размеры 1200/72;
 - отсутствие двойного volume-события на release кольцевой кнопки;
 - PID/starttime/cmdline при pause/resume и crash recovery;
-- bounded audio overflow и slow-client disconnect;
+- bounded audio overflow, тайм-аут пустого/медленного HTTP consumer и
+  slow-client disconnect;
+- обработку всех уже прочитанных NDJSON-команд, включая пакет больше 8 строк;
 - отсутствие `system()`/`popen()` и framebuffer `write()` в production-коде;
 - rollback OTA-правил и отказ от flush чужих цепочек;
 - плагин сам пишет fb4 и fb5, idle/визуализатор не трогают кольцо, анимация
   гасит кольцо при выходе, padding строк не пишется, отказ при неверной геометрии;
+- отсутствие CPU-spin после `POLLHUP` PCM pipe и утечки унаследованных fd с
+  номерами выше 127 в плагин;
 - супервизор передаёт пути обоих устройств и `--no-ring` для idle, не пишет в
   fb5 сам, отклоняет `draw_*`, отрабатывает музыкальные переходы и кнопки.
 

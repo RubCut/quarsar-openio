@@ -10,14 +10,19 @@
 #include <unistd.h>
 
 #define PCM_TIMEOUT_MS 30000
-#define HTTP_TIMEOUT_MS 5000
+#ifndef QIO_HTTP_TIMEOUT_MS
+#define QIO_HTTP_TIMEOUT_MS 5000
+#endif
+#define HTTP_TIMEOUT_MS QIO_HTTP_TIMEOUT_MS
 
 static void close_http(qio_http *http)
 {
     qio_close_fd(&http->fd);
     http->request_used = 0;
     http->header_used = 0;
+    http->deadline_ms = 0;
     http->streaming = false;
+    http->close_after_send = false;
 }
 
 static int listen_loopback(int port)
@@ -47,6 +52,7 @@ int qio_audio_init(qio_audio *audio, const qio_options *options, int64_t now)
     audio->pcm_listen_fd = audio->http_listen_fd = audio->pcm_fd = -1;
     audio->mirror_fd = -1;
     audio->last_sound_ms = 0;
+    audio->producer_eof = false;
     for (size_t i = 0; i < QIO_HTTP_CLIENTS; ++i) audio->http[i].fd = -1;
     if (options->no_audio) return 0;
     audio->pcm_port = options->audio_port;
@@ -64,6 +70,7 @@ int qio_audio_init(qio_audio *audio, const qio_options *options, int64_t now)
     }
     qio_log("audio: PCM 127.0.0.1:%d -> bounded %u-byte ring -> HTTP 127.0.0.1:%d; "
             "S16LE/48000/stereo", options->audio_port, QIO_AUDIO_CAPACITY, options->http_port);
+    qio_log("audio: loopback TCP does not authenticate local UIDs; restrict clients with SELinux or --no-audio");
     return 0;
 }
 
@@ -138,7 +145,7 @@ static void prepare_wav(uint8_t *header)
     memset(header + 40, 0xff, 4);
 }
 
-static void http_request(qio_audio *audio, qio_http *http)
+static void http_request(qio_audio *audio, qio_http *http, int64_t now)
 {
     uint8_t *end = memmem(http->request, http->request_used, "\r\n\r\n", 4);
     if (end == NULL) {
@@ -204,7 +211,7 @@ static void http_request(qio_audio *audio, qio_http *http)
             if (wav) { prepare_wav(http->header + n); n += 44; }
             http->streaming = true;
             http->close_after_send = false;
-            http->deadline_ms = qio_now_ms() + HTTP_TIMEOUT_MS;
+            http->deadline_ms = now + HTTP_TIMEOUT_MS;
         } else n = -1;
     } else {
         http_error(http, "404 Not Found", "use /audio.wav, /audio.pcm or /health\n");
@@ -217,26 +224,40 @@ static void http_request(qio_audio *audio, qio_http *http)
     http->header_used = (size_t)n;
 }
 
-static void http_send(qio_audio *audio, qio_http *http)
+static void cap_write_deadline(qio_http *http, int64_t now)
+{
+    int64_t deadline = now + HTTP_TIMEOUT_MS;
+    if (http->deadline_ms == 0 || http->deadline_ms > deadline)
+        http->deadline_ms = deadline;
+}
+
+static void http_send(qio_audio *audio, qio_http *http, int64_t now)
 {
     if (http->fd < 0) return;
     while (http->header_used != 0) {
         ssize_t count = send(http->fd, http->header, http->header_used, MSG_NOSIGNAL);
         if (count < 0 && errno == EINTR) continue;
         if (count < 0) {
-            if (errno != EAGAIN) close_http(http);
+            if (errno == EAGAIN) cap_write_deadline(http, now);
+            else close_http(http);
             return;
         }
         if (count == 0) { close_http(http); return; }
         size_t sent = (size_t)count;
         http->header_used -= sent;
         memmove(http->header, http->header + sent, http->header_used);
+        http->deadline_ms = now + HTTP_TIMEOUT_MS;
     }
     if (!http->streaming) {
         if (http->close_after_send) close_http(http);
         return;
     }
-    http->deadline_ms = 0;
+    if (audio->used == 0) {
+        if (audio->producer_eof) close_http(http);
+        else if (audio->pcm_fd >= 0) http->deadline_ms = now + PCM_TIMEOUT_MS;
+        else if (http->deadline_ms == 0) http->deadline_ms = now + HTTP_TIMEOUT_MS;
+        return;
+    }
     while (audio->used != 0) {
         size_t contiguous = QIO_AUDIO_CAPACITY - audio->head;
         size_t amount = audio->used < contiguous ? audio->used : contiguous;
@@ -244,21 +265,24 @@ static void http_send(qio_audio *audio, qio_http *http)
         ssize_t count = send(http->fd, audio->ring + audio->head, amount, MSG_NOSIGNAL);
         if (count < 0 && errno == EINTR) continue;
         if (count < 0) {
-            if (errno != EAGAIN) close_http(http);
+            if (errno == EAGAIN) cap_write_deadline(http, now);
+            else close_http(http);
             return;
         }
         if (count == 0) { close_http(http); return; }
         size_t sent = (size_t)count;
         audio->head = (audio->head + sent) % QIO_AUDIO_CAPACITY;
         audio->used -= sent;
+        http->deadline_ms = now + HTTP_TIMEOUT_MS;
     }
     if (audio->producer_eof) close_http(http);
+    else if (audio->pcm_fd >= 0) http->deadline_ms = now + PCM_TIMEOUT_MS;
 }
 
-static void pump(qio_audio *audio)
+static void pump(qio_audio *audio, int64_t now)
 {
     for (size_t i = 0; i < QIO_HTTP_CLIENTS; ++i)
-        if (audio->http[i].fd >= 0) http_send(audio, &audio->http[i]);
+        if (audio->http[i].fd >= 0) http_send(audio, &audio->http[i], now);
 }
 
 static void accept_http(qio_audio *audio, int64_t now)
@@ -298,6 +322,11 @@ static void accept_pcm(qio_audio *audio, int64_t now)
     audio->producer_eof = false;
     audio->carry_used = 0;
     audio->pcm_deadline_ms = now + PCM_TIMEOUT_MS;
+    for (size_t i = 0; i < QIO_HTTP_CLIENTS; ++i) {
+        qio_http *http = &audio->http[i];
+        if (http->streaming && http->header_used == 0 && audio->used == 0)
+            http->deadline_ms = now + PCM_TIMEOUT_MS;
+    }
     qio_log("PCM producer connected");
 }
 
@@ -309,7 +338,7 @@ static void read_pcm(qio_audio *audio, int64_t now)
     if (count <= 0) {
         if (count < 0) qio_log("PCM read: %s", strerror(errno));
         close_producer(audio);
-        pump(audio);
+        pump(audio, now);
         return;
     }
     audio->accepted_bytes += (uint64_t)count;
@@ -324,7 +353,7 @@ static void read_pcm(qio_audio *audio, int64_t now)
     mirror_to_plugin(audio, framed, complete);
     audio->carry_used = total - complete;
     memcpy(audio->carry, framed + complete, audio->carry_used);
-    pump(audio);
+    pump(audio, now);
 }
 
 static void http_event(qio_audio *audio, qio_http *http, short revents, int64_t now)
@@ -349,7 +378,7 @@ static void http_event(qio_audio *audio, qio_http *http, short revents, int64_t 
             if (count > 0) {
                 http->request_used += (size_t)count;
                 http->deadline_ms = now + HTTP_TIMEOUT_MS;
-                http_request(audio, http);
+                http_request(audio, http, now);
             }
         }
     }
@@ -358,7 +387,8 @@ static void http_event(qio_audio *audio, qio_http *http, short revents, int64_t 
         close_http(http);
         return;
     }
-    if (http->header_used != 0) http_send(audio, http);
+    if (http->header_used != 0 || (http->streaming && audio->used != 0))
+        http_send(audio, http, now);
 }
 
 size_t qio_audio_pollfds(qio_audio *audio, struct pollfd *fds, size_t capacity)

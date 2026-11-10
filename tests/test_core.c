@@ -20,6 +20,7 @@ static void test_json(void)
         "{\"action\":\"status\",\"command\":\"reboot\"}",
         "{\"action\":\"status\"} trailing", "{\"action\":\"status\",}",
         "{\"action\":[\"status\"]}", "{\"action\":\"\\u0430dmin\"}",
+        "{\"action\":\"status\\u0000ignored\"}",
         "{\"action\":\"status\"}\n{\"action\":\"pause_sdk\"}"
     };
     for (size_t i = 0; i < sizeof(invalid) / sizeof(invalid[0]); ++i)

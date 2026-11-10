@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "quasar_openio.h"
 #include <ctype.h>
+#include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
@@ -294,6 +295,38 @@ static int set_nonblock_cloexec(int fd)
     return 0;
 }
 
+static int close_child_fds(bool keep_audio)
+{
+    char path[64];
+    int n = snprintf(path, sizeof(path), "/proc/%ld/fd", (long)getpid());
+    if (n < 0 || (size_t)n >= sizeof(path)) return -1;
+    DIR *directory = opendir(path);
+    if (directory == NULL) return -1;
+    int scan_fd = dirfd(directory);
+    if (scan_fd < 0) { closedir(directory); return -1; }
+    int result = 0;
+    for (;;) {
+        errno = 0;
+        struct dirent *entry = readdir(directory);
+        if (entry == NULL) {
+            if (errno != 0) result = -1;
+            break;
+        }
+        char *end;
+        errno = 0;
+        long value = strtol(entry->d_name, &end, 10);
+        if (errno != 0 || end == entry->d_name || *end != '\0' ||
+            value < 0 || value > INT_MAX)
+            continue;
+        int fd = (int)value;
+        if (fd <= STDERR_FILENO || fd == scan_fd || (keep_audio && fd == 3))
+            continue;
+        (void)close(fd);
+    }
+    if (closedir(directory) != 0) result = -1;
+    return result;
+}
+
 static void launch_child(qio_app *app, const char *mode, int64_t now)
 {
     qio_plugin *plugin = &app->plugin;
@@ -342,25 +375,26 @@ static void launch_child(qio_app *app, const char *mode, int64_t now)
     }
     if (child == 0) {
         (void)setpgid(0, 0);
-        (void)prctl(PR_SET_PDEATHSIG, SIGTERM);
+        if (prctl(PR_SET_PDEATHSIG, SIGTERM) != 0) _exit(126);
         if (getppid() != parent) _exit(1);
+        if (prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) != 0) _exit(126);
         struct rlimit limit = {0, 0};
-        (void)setrlimit(RLIMIT_CORE, &limit);
-        limit.rlim_cur = limit.rlim_max = 32U * 1024U * 1024U;
-        (void)setrlimit(RLIMIT_AS, &limit);
-        limit.rlim_cur = limit.rlim_max = 32;
-        (void)setrlimit(RLIMIT_NOFILE, &limit);
+        if (setrlimit(RLIMIT_CORE, &limit) != 0) _exit(126);
         if (dup2(in_pipe[0], STDIN_FILENO) < 0 || dup2(out_pipe[1], STDOUT_FILENO) < 0 ||
+            dup2(out_pipe[1], STDERR_FILENO) < 0 ||
             (visualizer && dup2(audio_pipe[0], 3) < 0))
             _exit(126);
         (void)fcntl(STDIN_FILENO, F_SETFD, 0);
         (void)fcntl(STDOUT_FILENO, F_SETFD, 0);
+        (void)fcntl(STDERR_FILENO, F_SETFD, 0);
         if (visualizer) (void)fcntl(3, F_SETFD, 0);
-        /* Close every inherited descriptor except stdio and the visualizer PCM fd. */
-        for (int fd = 3; fd < 128; ++fd) {
-            if (visualizer && fd == 3) continue;
-            close(fd);
-        }
+        /* RLIMIT_NOFILE does not close an already-open descriptor whose number
+         * is above the new limit. Enumerate the actual table instead. */
+        if (close_child_fds(visualizer) != 0) _exit(126);
+        limit.rlim_cur = limit.rlim_max = 32U * 1024U * 1024U;
+        if (setrlimit(RLIMIT_AS, &limit) != 0) _exit(126);
+        limit.rlim_cur = limit.rlim_max = 32;
+        if (setrlimit(RLIMIT_NOFILE, &limit) != 0) _exit(126);
         execve(plugin->binary, argv, envp);
         _exit(127);
     }
@@ -382,6 +416,9 @@ static void launch_child(qio_app *app, const char *mode, int64_t now)
     plugin->child_stdout = out_pipe[0];
     snprintf(plugin->child_mode, sizeof(plugin->child_mode), "%s", mode);
     plugin->child_is_animation = animation;
+    if (animation && plugin->overlay_active &&
+        strcmp(plugin->overlay, mode) == 0)
+        plugin->overlay_deadline_ms = now + animation_duration(mode);
     plugin->kill_deadline_ms = 0;
     plugin->child_deadline_ms = animation ? now + animation_duration(mode) + 500 : 0;
     if (visualizer) app->audio.mirror_fd = audio_pipe[1];
@@ -538,7 +575,7 @@ void qio_plugin_stdout_event(qio_app *app, short revents, int64_t now)
     qio_plugin *plugin = &app->plugin;
     if (plugin->child_stdout < 0) return;
     if ((revents & POLLNVAL) != 0) {
-        close_child_pipes(plugin);
+        qio_close_fd(&plugin->child_stdout);
         return;
     }
     if ((revents & POLLIN) != 0) {
@@ -546,13 +583,13 @@ void qio_plugin_stdout_event(qio_app *app, short revents, int64_t now)
         ssize_t count = read(plugin->child_stdout, buffer, sizeof(buffer));
         if (count < 0 && (errno == EAGAIN || errno == EINTR)) return;
         if (count <= 0) {
-            close_child_pipes(plugin);
+            qio_close_fd(&plugin->child_stdout);
             return;
         }
         plugin->stdout_bytes += (uint64_t)count;
     }
     if ((revents & (POLLERR | POLLHUP)) != 0)
-        close_child_pipes(plugin);
+        qio_close_fd(&plugin->child_stdout);
 }
 
 int qio_plugin_status(qio_plugin *plugin, char *buffer, size_t capacity)

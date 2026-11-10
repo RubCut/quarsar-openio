@@ -182,8 +182,28 @@ def integration(binary: Path, fixture: Path, root: Path, sanitize: bool = False)
                                    capture_output=True, timeout=3)
         assert duplicate.returncode == 1 and b"lock busy" in duplicate.stderr
         assert command(socket_path, {"action": "status"})["ok"] is True
+        duplicate_sdk = proc / "424243"
+        duplicate_sdk.mkdir()
+        (duplicate_sdk / "cmdline").write_bytes(b"com.yandex.io.sdk\x00")
+        duplicate_fields = fields.copy()
+        duplicate_fields[0] = "424243"
+        duplicate_fields[21] = "987654322"
+        (duplicate_sdk / "stat").write_text(" ".join(duplicate_fields))
+        assert command(socket_path, {"action": "status"})["sdk"]["state"] == "ambiguous"
+        (duplicate_sdk / "cmdline").unlink()
+        (duplicate_sdk / "stat").unlink()
+        duplicate_sdk.rmdir()
         assert command(socket_path, {"action": "wat"})["error"] == "unknown_action"
         assert command(socket_path, {"action": "status", "command": "reboot"})["error"] == "invalid_request"
+        # Every complete line already read from the socket must be dispatched;
+        # a ninth short command used to wait forever for a tenth write.
+        with socket.socket(socket.AF_UNIX) as sock:
+            sock.settimeout(3)
+            sock.connect(socket_path)
+            sock.sendall(b'{"action":"status"}\n' * 9)
+            with sock.makefile("rb") as stream:
+                replies = [json.loads(stream.readline()) for _ in range(9)]
+            assert all(reply["ok"] for reply in replies)
         with socket.socket(socket.AF_UNIX) as sock:
             sock.settimeout(3)
             sock.connect(socket_path)
@@ -256,6 +276,14 @@ def integration(binary: Path, fixture: Path, root: Path, sanitize: bool = False)
                           "microphone_mute_on", "microphone_mute_off", "volume_up",
                           "volume_up", "volume_up_released"], events
         subscriber.close()
+
+        # A streaming client cannot reserve the only consumer slot forever
+        # while no PCM producer exists.
+        idle_consumer, headers, _ = http_get(daemon.http_port, "/audio.pcm")
+        assert b"200 OK" in headers
+        idle_consumer.settimeout(2)
+        assert idle_consumer.recv(1) == b""
+        idle_consumer.close()
 
         # PCM -> bounded ring -> HTTP WAV, including frame-aligned overflow.
         pcm = socket.create_connection(("127.0.0.1", daemon.pcm_port), timeout=3)
@@ -392,6 +420,7 @@ def main() -> int:
         binary = build / "quasar_openio"
         subprocess.run([cc, *flags, "-Iinclude", *[str(p) for p in sorted((ROOT / "src").glob("*.c"))],
                         *[f"-D{key}={json.dumps(str(value))}" for key, value in defines.items()],
+                        "-DQIO_HTTP_TIMEOUT_MS=300",
                         "-o", str(binary)], cwd=ROOT, check=True)
         try:
             integration(binary, build / "libfixture.so", root, args.sanitize)

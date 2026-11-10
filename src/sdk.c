@@ -239,13 +239,13 @@ int qio_sdk_pause(qio_sdk *sdk)
         int result = read_identity(sdk->pid, &id);
         if (result != QIO_SDK_OK || id.start_ticks != sdk->start_ticks)
             return QIO_SDK_IDENTITY;
-        if (id.state == 'T') return QIO_SDK_ALREADY;
+        if (id.state == 'T' || id.state == 't') return QIO_SDK_ALREADY;
         if (id.state == 'Z' || id.state == 'X') return QIO_SDK_NOT_FOUND;
     } else {
         int result = find_sdk(&id);
         if (result != QIO_SDK_OK) return result;
         /* Do not adopt an externally stopped process and later resume it. */
-        if (id.state == 'T') return QIO_SDK_ALREADY;
+        if (id.state == 'T' || id.state == 't') return QIO_SDK_ALREADY;
         if (id.state == 'Z' || id.state == 'X') return QIO_SDK_NOT_FOUND;
     }
     /* Intent journal precedes STOP: a crash in between is safe to recover. */
@@ -326,10 +326,11 @@ int qio_sdk_status(qio_sdk *sdk, char *buffer, size_t capacity)
     } else {
         result = find_sdk(&id);
         if (result == QIO_SDK_OK) pid = (long)id.pid;
+        else if (result == QIO_SDK_AMBIGUOUS) state = "ambiguous";
     }
     if (pid != 0 && strcmp(state, "identity_changed") != 0) {
         switch (id.state) {
-        case 'T': state = "stopped"; break;
+        case 'T': case 't': state = "stopped"; break;
         case 'Z': case 'X': state = "dead"; break;
         default: state = "running_or_sleeping"; break;
         }

@@ -92,16 +92,40 @@ owned_chains() {
                 name=${line#-N }
                 names="$names $name"
                 ;;
-            -A\ QIO_OTA_*)
+            -A\ OUTPUT\ *-j\ QIO_OTA_*)
                 case "$line" in *"--comment $MARKER"*|*"--comment \"$MARKER\""*) ;; *) return 1 ;; esac
                 ;;
-            -A\ OUTPUT\ *-j\ QIO_OTA_*)
+            -A\ *-j\ QIO_OTA_*)
+                # Our chains are referenced only by their marked OUTPUT jump.
+                # A reference from another chain makes deletion unsafe.
+                return 1
+                ;;
+            -A\ QIO_OTA_*)
                 case "$line" in *"--comment $MARKER"*|*"--comment \"$MARKER\""*) ;; *) return 1 ;; esac
                 ;;
         esac
     done <<EOF
 $listing
 EOF
+    # A chain has no metadata of its own. At least one marked rule is therefore
+    # required to distinguish our chain from an unrelated empty QIO_OTA_* chain.
+    for name in $names; do
+        chain_listing=$("$tool" -S "$name") || return 1
+        marked=0
+        while IFS= read -r line; do
+            case "$line" in
+                "-A $name "*)
+                    case "$line" in
+                        *"--comment $MARKER"*|*"--comment \"$MARKER\""*) marked=1 ;;
+                        *) return 1 ;;
+                    esac
+                    ;;
+            esac
+        done <<EOF
+$chain_listing
+EOF
+        [ "$marked" = 1 ] || return 1
+    done
     printf '%s\n' "$names"
 }
 

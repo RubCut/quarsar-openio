@@ -39,6 +39,12 @@ def wait_for(predicate, message, timeout=8.0):
     raise AssertionError(message)
 
 
+def cpu_ticks(pid):
+    text = Path(f"/proc/{pid}/stat").read_text()
+    fields = text[text.rfind(")") + 2:].split()
+    return int(fields[11]) + int(fields[12])
+
+
 class PackTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -225,6 +231,31 @@ class PackTests(unittest.TestCase):
         self.assertEqual(stdout, b"")
         self.assert_screen_written()
         self.assert_ring_untouched()
+
+    def test_visualizer_audio_hup_does_not_spin(self):
+        read_fd, write_fd = os.pipe()
+        os.close(write_fd)
+        with self.log_path.open("wb") as log:
+            process = subprocess.Popen(
+                self.args("visualizer", "--duration-ms", "900", "--fps", "30",
+                          "--audio-fd", str(read_fd)),
+                stdout=subprocess.PIPE, stderr=log, env=self.env(), pass_fds=(read_fd,))
+            os.close(read_fd)
+            try:
+                time.sleep(0.1)
+                before = cpu_ticks(process.pid)
+                time.sleep(0.5)
+                used = cpu_ticks(process.pid) - before
+                stdout, _ = process.communicate(timeout=10)
+            finally:
+                if process.poll() is None:
+                    process.kill()
+                    process.wait(timeout=5)
+        text = self.log_path.read_text(errors="replace")
+        self.assert_clean(text)
+        self.assertEqual(process.returncode, 0, text)
+        self.assertEqual(stdout, b"")
+        self.assertLessEqual(used, 10, f"closed audio pipe consumed {used} CPU ticks")
 
     def test_sigterm_clean_shutdown_leaves_ring_dark(self):
         with self.log_path.open("wb") as log:

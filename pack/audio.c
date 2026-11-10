@@ -20,12 +20,15 @@ void pack_audio_event(pack_state *state, short revents)
     pack_audio *audio = &state->audio;
     if (audio->fd < 0 || audio->eof) return;
     if ((revents & POLLNVAL) != 0) { audio->eof = true; return; }
-    if ((revents & POLLIN) == 0) return;
-    uint8_t buffer[4096];
-    ssize_t count = read(audio->fd, buffer, sizeof(buffer));
-    if (count < 0 && (errno == EAGAIN || errno == EINTR)) return;
-    if (count <= 0) { audio->eof = true; return; }
-    pack_visualizer_feed(state, buffer, (size_t)count);
+    if ((revents & POLLIN) != 0) {
+        uint8_t buffer[4096];
+        ssize_t count = read(audio->fd, buffer, sizeof(buffer));
+        if (count < 0 && (errno == EAGAIN || errno == EINTR)) return;
+        if (count <= 0) { audio->eof = true; return; }
+        pack_visualizer_feed(state, buffer, (size_t)count);
+    }
+    /* A pipe with no buffered data reports POLLHUP without POLLIN. Ignoring
+     * that state makes poll() return immediately forever and spins one CPU. */
     if ((revents & (POLLERR | POLLHUP)) != 0) audio->eof = true;
 }
 

@@ -13,6 +13,13 @@
 - состоянием музыки и выбором режима (idle / visualizer / анимация);
 - жизненным циклом процесса: `SIGTERM` → `SIGKILL`, `waitpid`, backoff, rlimits.
 
+Плагин считается доверенным системным расширением и намеренно наследует root UID,
+группы и SELinux-домен `quasar_openio`. Это часть контракта: плагину нужен прямой
+доступ к fb4/fb5 и свобода работы с устройствами. Ограничения процесса защищают
+демон от случайных утечек ресурсов, но не являются sandbox и не пытаются отнять
+у плагина текущие root-права. На Android фактический доступ всё равно определяется
+SELinux-политикой; root не обходит enforcing.
+
 Демон **не рисует** ни fb4, ни fb5, пока плагин загружен: команды `draw_screen` и
 `draw_ring` в этом случае отклоняются с `plugin_owns_output`.
 
@@ -72,14 +79,16 @@ quasar_pack MODE --screen /dev/graphics/fb4 --ring /dev/graphics/fb5 \
   --fps 30 --brightness 64 --duration-ms 900 [--audio-fd 3] [--no-ring]
 ```
 
-- `fork()` + `execve()`, один живой ребёнок, `setpgid`, `PR_SET_PDEATHSIG`.
+- `fork()` + `execve()`, один живой ребёнок, `setpgid`, `PR_SET_PDEATHSIG`,
+  `PR_SET_NO_NEW_PRIVS`.
 - `RLIMIT_CORE 0`, `RLIMIT_AS 32 MiB`, `RLIMIT_NOFILE 32`.
-- Все унаследованные fd кроме stdin/stdout (и fd 3 для PCM) закрываются.
+- Все унаследованные fd кроме stdin/stdout/stderr (и fd 3 для PCM) закрываются
+  через инвентаризацию `/proc/<pid>/fd`, включая номера выше `RLIMIT_NOFILE`.
 - `LD_PRELOAD`/`LD_LIBRARY_PATH` вырезаются из окружения.
 - stdin ребёнка: строки `button <event>` от демона (неблокирующая запись,
   при переполнении счётчик `dropped_commands`, а не рост памяти).
-- stdout ребёнка: только диагностика; демон вычитывает ограниченный объём и
-  отбрасывает. Никаких команд рисования по этому каналу нет.
+- stdout/stderr ребёнка: только диагностика; демон вычитывает ограниченный объём
+  и отбрасывает. Никаких команд рисования по этому каналу нет.
 - Визуализатор получает PCM в fd 3 из аудио-моста демона.
 
 ## Аргументы бинарника
@@ -111,18 +120,19 @@ Docker (статический ARM64):
 ```sh
 docker build --platform linux/arm64 -t quasar-openio-builder .
 id=$(docker create --platform linux/arm64 quasar-openio-builder)
-docker cp "$id:/quasar_openio" ./quasar_openio
-docker cp "$id:/plugins/standard/quasar_pack" ./quasar_pack
-docker cp "$id:/plugins/standard/plugin.conf" ./plugin.conf
+mkdir -p build/aarch64
+docker cp "$id:/quasar_openio" ./build/aarch64/quasar_openio
+docker cp "$id:/plugins/standard/quasar_pack" ./build/aarch64/quasar_pack
 docker rm "$id"
 ```
 
 Cross-сборка через Zig (проверена в этой среде):
 
 ```sh
-python3 -m ziglang cc -target aarch64-linux-musl -static -std=c11 -O2 \
+python3 -m ziglang cc -target aarch64-linux-musl -static-pie -fPIE -std=c11 -O2 \
   -Iinclude -Wall -Wextra -Wpedantic -Wshadow -Wformat=2 \
-  -Wconversion -Wsign-conversion -Werror \
+  -Wconversion -Wsign-conversion -Werror -fstack-protector-strong \
+  -D_FORTIFY_SOURCE=2 -Wl,-z,relro,-z,now,-z,noexecstack \
   pack/*.c src/util.c src/framebuffer.c src/json.c -o build/aarch64/quasar_pack
 ```
 

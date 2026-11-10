@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -13,6 +14,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts/quasar_block_ota.sh"
+INSTALL = ROOT / "scripts/install_odm.sh"
 MARKER = "quasar-openio-ota-v1"
 DOMAINS = ["download.cdn.yandex.net", "updater.mobile.yandex.net", "quasar.s3.yandex.net"]
 
@@ -123,6 +125,16 @@ class OtaScript(unittest.TestCase):
         self.assertNotEqual(self.run_script("--remove").returncode, 0)
         self.assertEqual(self.state.read_text(), before)
 
+    def test_empty_foreign_chain_collision_is_not_deleted(self):
+        foreign = {"4": {"chains": {"QIO_OTA_FOREIGN": []}, "output": []},
+                   "6": {"chains": {}, "output": []}}
+        self.state.write_text(json.dumps(foreign))
+        before = self.state.read_text()
+        result = self.run_script("--remove")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("collision", result.stderr)
+        self.assertEqual(self.state.read_text(), before)
+
     def test_ipv4_only_requires_verified_disabled_ipv6(self):
         self.assertNotEqual(self.run_script("--apply", "--ipv4-only").returncode, 0)
         self.ipv6.write_text("1\n")
@@ -137,6 +149,20 @@ class OtaScript(unittest.TestCase):
         self.assertEqual(self.run_script("--apply", "--uid", "abc").returncode, 2)
         self.assertEqual(self.run_script("--apply", "--uid", "1", "--uid", "2", "--uid", "3",
                                          "--uid", "4", "--uid", "5").returncode, 2)
+
+    def test_installer_rejects_host_architecture_before_odm(self):
+        readelf = shutil.which("readelf")
+        self.assertIsNotNone(readelf)
+        env = os.environ.copy()
+        env.update({
+            "QUASAR_BINARY": "/bin/true",
+            "QUASAR_PACK_BINARY": "/bin/true",
+            "QUASAR_READELF": readelf,
+        })
+        result = subprocess.run(["/bin/sh", str(INSTALL), "--preview"], env=env,
+                                capture_output=True, text=True, timeout=10)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("not AArch64", result.stderr)
 
 
 if __name__ == "__main__":

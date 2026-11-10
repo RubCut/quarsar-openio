@@ -29,6 +29,7 @@ REQUIRED = "music-play,music-pause,mic-on,mic-off,volume-up,volume-down,volume-r
 
 MOCK_C = r'''
 #define _POSIX_C_SOURCE 200809L
+#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
@@ -45,6 +46,7 @@ int main(int argc, char **argv)
         fprintf(f, "argv");
         for (int i = 2; i < argc; ++i) fprintf(f, " %s", argv[i]);
         fprintf(f, "\n");
+        fprintf(f, "fd200 %s\n", fcntl(200, F_GETFD) >= 0 ? "open" : "closed");
         fclose(f);
     }
     if (strcmp(mode, "clock") == 0) {
@@ -188,7 +190,17 @@ class PluginTests(unittest.TestCase):
         args = [str(self.binary), "--socket", str(self.socket_path),
                 "--plugin-dir", str(self.plugin_dir),
                 "--audio-port", str(self.pcm_port), "--http-port", str(self.http_port)]
-        self.process = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=self.log, env=env)
+        inherited = os.open("/dev/null", os.O_RDONLY)
+        if inherited != 200:
+            os.dup2(inherited, 200, inheritable=True)
+            os.close(inherited)
+        else:
+            os.set_inheritable(200, True)
+        try:
+            self.process = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=self.log,
+                                            env=env, pass_fds=(200,))
+        finally:
+            os.close(200)
         wait_for(lambda: self.socket_path.exists() and
                  "IPC listening" in self.log_path.read_text(errors="replace"), "daemon startup")
         wait_for(lambda: self.status()["plugin"]["child_mode"] == "clock", "idle clock launch")
@@ -222,6 +234,7 @@ class PluginTests(unittest.TestCase):
         self.assertIn(f"--screen {self.fb4}", argv)
         self.assertIn(f"--ring {self.fb5}", argv)
         self.assertIn("--no-ring", argv, "idle must be launched with the ring disabled")
+        self.assertIn("fd200 closed", lines, "plugin inherited an unrelated high-numbered fd")
         # The supervisor never draws: both framebuffers stay untouched by openio.
         self.assertEqual(self.fb5.read_bytes(), b"\xa5" * 80)
         self.assertEqual(self.fb4.read_bytes(), b"\xa5" * (96 * 16))

@@ -275,7 +275,10 @@ void qio_ipc_client_event(qio_app *app, size_t index, short revents, int64_t now
             client->last_activity_ms = now;
         }
         size_t consumed = 0;
-        for (size_t command = 0; command < 8; ++command) {
+        /* The input buffer itself is the work bound. Process every complete
+         * line already copied from the kernel; otherwise a ninth short command
+         * can remain stranded until the peer sends more data. */
+        for (;;) {
             uint8_t *newline = memchr(client->in + consumed, '\n', client->in_used - consumed);
             if (newline == NULL) break;
             size_t length = (size_t)(newline - (client->in + consumed));
@@ -294,7 +297,9 @@ void qio_ipc_client_event(qio_app *app, size_t index, short revents, int64_t now
             error_response(app, index, "request_too_long");
             client->discard = true;
         }
-        client->partial_deadline_ms = client->in_used == 0 ? 0 : now + 5000;
+        if (client->in_used == 0) client->partial_deadline_ms = 0;
+        else if (consumed != 0 || client->partial_deadline_ms == 0)
+            client->partial_deadline_ms = now + 5000;
     }
     if ((revents & (POLLERR | POLLHUP)) != 0 && client->out_used == 0) {
         close_client(app, index);
