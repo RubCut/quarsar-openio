@@ -1,0 +1,517 @@
+<!doctype html>
+<html lang="ru">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#141218">
+    <meta name="theme-color" content="#FEF7FF" media="(prefers-color-scheme: light)">
+    <title>Quasar OpenIO</title>
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header class="top-app-bar">
+    <div class="brand">
+        <div class="brand-mark" aria-hidden="true">◈</div>
+        <div class="brand-text">
+            <h1>Quasar OpenIO</h1>
+            <p>Станция Макс · YNDX-0008</p>
+        </div>
+    </div>
+    <div class="top-status">
+        <div id="modeChip" class="chip">режим: —</div>
+        <div id="conn" class="chip offline"><span class="dot"></span><span id="connText">нет связи</span></div>
+    </div>
+</header>
+
+<div class="page">
+    <!-- ------------------------------------------------- SHARED PREVIEW -->
+    <div class="preview-strip">
+        <section class="card preview-card" aria-label="Предпросмотр дисплея и кольца">
+            <div class="card-head">
+                <h2>Дисплей</h2>
+                <span class="badge">fb4 · 25×16</span>
+            </div>
+            <div class="preview-row">
+                <div class="panel-shell">
+                    <img id="screenPreview" class="screen-preview" width="150" height="96" alt="Кадр экрана 25×16">
+                    <span id="screenCaption" class="panel-caption">кадр</span>
+                </div>
+                <div class="ring-shell">
+                    <canvas id="ringPreview" width="120" height="120" aria-label="Кольцо 24 LED"></canvas>
+                    <span class="panel-caption">кольцо · 24 LED</span>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <main class="layout">
+        <!-- ---------------------------------------------------- ЧАСЫ -->
+        <section id="tab-clock" class="tab-panel active">
+            <section class="card">
+                <div class="setting-row">
+                    <div>
+                        <b>Часы</b>
+                        <p class="support">Глобальный вид: белые HH:MM на чёрном.</p>
+                    </div>
+                    <label class="switch"><input id="featureClock" type="checkbox"><span class="track"></span></label>
+                </div>
+            </section>
+
+            <details class="card advanced-card">
+                <summary class="card-head summary-head">
+                    <h2>Дополнительно</h2>
+                    <span id="clockBadge" class="badge">часы</span>
+                </summary>
+                <label class="outlined">
+                    <span class="outlined-label">Часы</span>
+                    <select id="clockSelect" class="select"></select>
+                </label>
+                <div id="clockConfig" class="config-grid"></div>
+                <div class="button-row">
+                    <button id="clockShow" class="button filled" type="button">Показать часы</button>
+                </div>
+            </details>
+
+            <section class="card">
+                <div class="card-head">
+                    <h2>Размер часов</h2>
+                    <span class="badge">глобально</span>
+                </div>
+                <div id="clockSize" class="segmented" role="group" aria-label="Размер цифр часов"></div>
+            </section>
+        </section>
+
+        <!-- ------------------------------------------- ВИЗУАЛИЗАТОРЫ -->
+        <section id="tab-visualizers" class="tab-panel">
+            <section class="card">
+                <div class="setting-row">
+                    <div>
+                        <b>Визуализатор</b>
+                        <p class="support">Одна волна на экране, уровень на кольце.</p>
+                    </div>
+                    <label class="switch"><input id="featureVisualizer" type="checkbox"><span class="track"></span></label>
+                </div>
+            </section>
+
+            <section class="card">
+                <div class="setting-row">
+                    <div>
+                        <b>Волна</b>
+                        <p class="support">Единственный визуализатор: тонкая белая линия.</p>
+                    </div>
+                    <span id="visualizerBadge" class="badge">1</span>
+                </div>
+                <select id="visualizerSelect" class="select" hidden></select>
+                <div id="visualizerConfig" hidden></div>
+                <div class="button-row">
+                    <button id="visualizerShow" class="button filled" type="button">Показать визуализатор</button>
+                </div>
+            </section>
+
+            <section class="card">
+                <div class="card-head">
+                    <h2>Параметры</h2>
+                    <span class="badge">волна</span>
+                </div>
+                <label class="range-field">
+                    <span class="control-label">Чувствительность · <b id="scopeSensLabel">1</b></span>
+                    <input id="scopeSensitivity" class="range" type="range" min="0.25" max="8" step="0.25" value="1">
+                </label>
+                <label class="range-field">
+                    <span class="control-label">Плавность · <b id="scopeSmoothLabel">1.5 с</b></span>
+                    <input id="scopeSmooth" class="range" type="range" min="0" max="5000" step="100" value="1500">
+                    <small class="support">Сколько волна плавно затухает после остановки музыки.</small>
+                </label>
+                <div class="control-block">
+                    <span class="control-label">Полоса</span>
+                    <div id="scopeBand" class="segmented" role="group" aria-label="Полоса частот"></div>
+                </div>
+                <label class="range-field">
+                    <span class="control-label">FPS · <b id="scopeFpsLabel">30</b></span>
+                    <input id="scopeFps" class="range" type="range" min="1" max="50" step="1" value="30">
+                    <small class="support" id="scopeFpsActual">0 fps факт</small>
+                </label>
+            </section>
+
+            <section class="card">
+                <div class="card-head">
+                    <h2>Кольцо</h2>
+                    <span class="badge">24 LED</span>
+                </div>
+                <label class="field inline">
+                    <span>Цвет кольца</span>
+                    <input id="ringColor" type="color" value="#66d9ff">
+                </label>
+                <div class="swatches">
+                    <button class="swatch" data-color="#ffffff" style="--swatch:#ffffff" title="белый"></button>
+                    <button class="swatch" data-color="#66d9ff" style="--swatch:#66d9ff" title="голубой"></button>
+                    <button class="swatch" data-color="#a78bfa" style="--swatch:#a78bfa" title="фиолетовый"></button>
+                    <button class="swatch" data-color="#4ade80" style="--swatch:#4ade80" title="зелёный"></button>
+                    <button class="swatch" data-color="#facc15" style="--swatch:#facc15" title="жёлтый"></button>
+                    <button class="swatch" data-color="#fb7185" style="--swatch:#fb7185" title="красный"></button>
+                </div>
+                <label class="range-field">
+                    <span class="control-label">Передний LED · <b id="ringOriginLabel">12</b></span>
+                    <input id="ringOrigin" class="range" type="range" min="0" max="23" step="1" value="12">
+                    <small class="support">Часы идут по часовой стрелке; передний светодиод по умолчанию — 12.</small>
+                </label>
+                <div class="setting-row">
+                    <div>
+                        <b>Подсветка кольца</b>
+                        <p class="support">Полное отключение кольца.</p>
+                    </div>
+                    <label class="switch"><input id="ringEnabled" type="checkbox"><span class="track"></span></label>
+                </div>
+            </section>
+        </section>
+
+        <!-- ---------------------------------------------- АНИМАЦИИ -->
+        <section id="tab-animations" class="tab-panel">
+            <section class="card">
+                <div class="setting-row">
+                    <div>
+                        <b>Анимации</b>
+                        <p class="support">Зацикленные GIF на экране.</p>
+                    </div>
+                    <label class="switch"><input id="featureAnimation" type="checkbox"><span class="track"></span></label>
+                </div>
+            </section>
+
+            <section class="card">
+                <div class="card-head">
+                    <h2>Выбор</h2>
+                    <span id="animationBadge" class="badge">—</span>
+                </div>
+                <label class="outlined">
+                    <span class="outlined-label">Анимация</span>
+                    <select id="animationSelect" class="select"></select>
+                </label>
+                <div id="animationConfig" class="config-grid"></div>
+                <label class="field inline">
+                    <span>Цвет анимации</span>
+                    <input id="animationColor" type="color" value="#ffffff">
+                </label>
+                <div class="button-row">
+                    <button id="animationShow" class="button filled" type="button">Включить анимацию</button>
+                    <button id="animationOnce" class="button tonal" type="button">Проиграть один раз</button>
+                </div>
+            </section>
+
+            <details class="card advanced-card">
+                <summary class="card-head summary-head">
+                    <h2>Автоанимации (медиа)</h2>
+                    <span class="badge">события</span>
+                </summary>
+                <div class="setting-row">
+                    <div>
+                        <b>Включить</b>
+                        <p class="support">GIF-реакции на воспроизведение, паузу и остановку.</p>
+                    </div>
+                    <label class="switch"><input id="mediaAnimEnabled" type="checkbox"><span class="track"></span></label>
+                </div>
+                <label class="outlined">
+                    <span class="outlined-label">Начало воспроизведения</span>
+                    <select id="mediaAnimPlay" class="select"></select>
+                </label>
+                <label class="outlined">
+                    <span class="outlined-label">Пауза</span>
+                    <select id="mediaAnimPause" class="select"></select>
+                </label>
+                <label class="outlined">
+                    <span class="outlined-label">Остановка</span>
+                    <select id="mediaAnimStop" class="select"></select>
+                </label>
+            </details>
+
+            <details class="card advanced-card">
+                <summary class="card-head summary-head">
+                    <h2>Кольцо — шаблоны</h2>
+                    <span id="ringBadge" class="badge">—</span>
+                </summary>
+                <div class="setting-row">
+                    <div>
+                        <b>Шаблоны кольца</b>
+                        <p class="support">Штатные <code>.led</code> шаблоны.</p>
+                    </div>
+                    <label class="switch"><input id="featureRing" type="checkbox"><span class="track"></span></label>
+                </div>
+                <p id="ringPatternState" class="support">шаблон не выбран</p>
+                <label class="outlined">
+                    <span class="outlined-label">Шаблон</span>
+                    <select id="ringSelect" class="select"></select>
+                </label>
+                <div id="ringConfig" class="config-grid"></div>
+                <div class="button-row">
+                    <button id="ringShow" class="button filled" type="button">Включить шаблон</button>
+                    <button id="ringStop" class="button text error" type="button">Стоп</button>
+                </div>
+            </details>
+        </section>
+
+        <!-- -------------------------------------------------- ОБЩИЕ -->
+        <section id="tab-general" class="tab-panel">
+            <section class="card">
+                <div class="card-head">
+                    <h2>Питание панели</h2>
+                    <span class="badge">главное</span>
+                </div>
+                <div class="setting-row main-row">
+                    <div>
+                        <b>Панель включена</b>
+                        <p class="support">Главный переключатель: при выключении экран гаснет.</p>
+                    </div>
+                    <label class="switch"><input id="masterToggle" type="checkbox"><span class="track"></span></label>
+                </div>
+                <div class="setting-row">
+                    <div>
+                        <b>Экран</b>
+                        <p class="support">Матрица 25×16 (fb4).</p>
+                    </div>
+                    <label class="switch"><input id="screenToggle" type="checkbox"><span class="track"></span></label>
+                </div>
+                <div class="setting-row">
+                    <div>
+                        <b>Кольцо 24 LED</b>
+                        <p class="support">Подсветка кольца.</p>
+                    </div>
+                    <label class="switch"><input id="ringPower" type="checkbox"><span class="track"></span></label>
+                </div>
+            </section>
+
+            <section class="card">
+                <div class="card-head">
+                    <h2>Режим</h2>
+                    <span id="autoBadge" class="badge">—</span>
+                </div>
+                <div class="setting-row">
+                    <div>
+                        <b>Авто</b>
+                        <p class="support">Тишина → часы, медиа → визуализатор.</p>
+                    </div>
+                    <label class="switch"><input id="autoToggle" type="checkbox"><span class="track"></span></label>
+                </div>
+                <p id="autoState" class="support">—</p>
+            </section>
+
+            <section class="card">
+                <div class="card-head">
+                    <h2>Микрофон и Алиса</h2>
+                    <span class="badge">PCM 16 кГц</span>
+                </div>
+                <div class="setting-row">
+                    <div>
+                        <b>Делиться микрофоном с системой</b>
+                        <p class="support">При активации Алисы наш захват приостанавливается, io.sdk получает микрофон.</p>
+                    </div>
+                    <label class="switch"><input id="micShare" type="checkbox"><span class="track"></span></label>
+                </div>
+                <div class="setting-row">
+                    <div>
+                        <b>Проброс микрофона системным приложениям</b>
+                        <p class="support">Забирает RECORD_AUDIO у io.sdk и перезапускает его, чтобы другие приложения могли записывать звук.</p>
+                    </div>
+                    <label class="switch"><input id="micPassthrough" type="checkbox"><span class="track"></span></label>
+                </div>
+                <div class="button-row">
+                    <button id="alice" class="button tonal" type="button">Скажи, Алиса</button>
+                </div>
+                <p id="aliceState" class="support">—</p>
+                <div class="meter-shell"><div id="meter" class="meter"></div></div>
+                <p id="micText" class="support mono">—</p>
+            </section>
+
+            <section class="card">
+                <div class="card-head">
+                    <h2>Кольцо → громкость</h2>
+                    <span class="badge">энкодер</span>
+                </div>
+                <div class="setting-row">
+                    <div>
+                        <b>Вращение кольца меняет громкость</b>
+                        <p class="support">Поворот энкодера меняет громкость станции.</p>
+                    </div>
+                    <label class="switch"><input id="ringVolumeToggle" type="checkbox"><span class="track"></span></label>
+                </div>
+                <label class="range-field">
+                    <span class="control-label">Шаг · <b id="ringVolumeStepLabel">1</b></span>
+                    <input id="ringVolumeStep" class="range" type="range" min="1" max="5" step="1" value="1">
+                </label>
+                <div class="setting-row">
+                    <div>
+                        <b>Показывать анимацию громкости</b>
+                        <p class="support">Дуга на кольце при повороте.</p>
+                    </div>
+                    <label class="switch"><input id="ringVolumeAnim" type="checkbox"><span class="track"></span></label>
+                </div>
+                <label class="range-field">
+                    <span class="control-label">Громкость · <b id="volumeLabel">0%</b></span>
+                    <input id="volume" class="range" type="range" min="0" max="100" step="1" value="50">
+                </label>
+                <div class="button-row">
+                    <button id="tone" class="button tonal" type="button">Тон 440 Гц</button>
+                </div>
+                <p id="audioState" class="support mono">—</p>
+            </section>
+
+            <details class="card advanced-card">
+                <summary class="card-head summary-head">
+                    <h2>Дополнительно</h2>
+                    <span class="badge">кнопки · io.sdk · система</span>
+                </summary>
+
+            <section class="card">
+                <div class="card-head">
+                    <h2>Кнопки</h2>
+                    <span class="badge">переназначение</span>
+                </div>
+                <p class="support">Кнопки пульта, энкодер громкости и кнопка Алисы.</p>
+                <div id="remapList" class="remap-list"></div>
+                <div class="button-row">
+                    <button id="remapReset" class="button text error" type="button">Сбросить переназначение</button>
+                </div>
+            </section>
+
+            <section class="card">
+                <div class="card-head">
+                    <h2>io.sdk (оригинальный io)</h2>
+                    <span id="sdkBadge" class="badge">—</span>
+                </div>
+                <p id="sdk" class="support mono">—</p>
+                <div class="button-row">
+                    <button id="freeze" class="button tonal" type="button">Остановить (SIGSTOP)</button>
+                    <button id="unfreeze" class="button filled" type="button">Продолжить (SIGCONT)</button>
+                </div>
+                <div class="button-row">
+                    <button id="restartPipeline" class="button text" type="button">Перезапустить пайплайн</button>
+                </div>
+                <p class="support">Останавливается только штатный io.sdk, сервисы платформы не трогаются.</p>
+            </section>
+
+            <section class="card">
+                <div class="card-head">
+                    <h2>Автозапуск</h2>
+                    <span id="autostartBadge" class="badge">—</span>
+                </div>
+                <div class="setting-row">
+                    <div>
+                        <b>Старт при загрузке</b>
+                        <p class="support">Транзакционно пишет только в /odm.</p>
+                    </div>
+                    <label class="switch"><input id="autostartToggle" type="checkbox"><span class="track"></span></label>
+                </div>
+                <p id="autostartState" class="support">—</p>
+            </section>
+
+            <section class="card">
+                <div class="card-head">
+                    <h2>Система</h2>
+                    <span class="badge">debug</span>
+                </div>
+                <p id="system" class="support mono">—</p>
+                <div class="button-row">
+                    <button id="hideIcon" class="button text" type="button">Скрыть иконку</button>
+                    <button id="showIcon" class="button text" type="button">Вернуть иконку</button>
+                </div>
+            </section>
+            </details>
+
+            <details id="modsArea" class="card mods-card">
+                <summary class="card-head summary-head">
+                    <h2>Моды и предметы</h2>
+                    <span class="head-badges">
+                        <span id="serviceBadge" class="badge">—</span>
+                        <span id="pluginBadge" class="badge">—</span>
+                    </span>
+                </summary>
+                <div class="mods-body">
+                    <p id="pluginState" class="support">—</p>
+
+                    <div class="mods-section">
+                        <h3>Установка мода</h3>
+                        <p class="support">Архив с верхней папкой <code>plugin/</code>: манифест, ресурсы, скрипты и фоновые сервисы мода.</p>
+                        <div class="button-row">
+                            <input id="pluginFile" type="file" accept=".zip,application/zip" class="file-input">
+                            <button id="pluginInstall" class="button filled" type="button">Установить</button>
+                        </div>
+                    </div>
+
+                    <div class="mods-section">
+                        <h3>Фоновые сервисы</h3>
+                        <p class="support">OpenIO — вотчдог: перезапускает процессы, пишет общий и отдельный лог по каждому моду.</p>
+                        <div id="serviceList" class="service-list"></div>
+                    </div>
+
+                    <div id="pluginPacks" class="plugin-packs"></div>
+                </div>
+            </details>
+
+            <details id="logsCard" class="card logs-card">
+                <summary class="card-head summary-head">
+                    <h2>Журнал и логи</h2>
+                    <span id="logState" class="badge">—</span>
+                </summary>
+                <div class="log-controls">
+                    <select id="logScope" class="select compact">
+                        <option value="global">Глобальный</option>
+                        <option value="plugin">Плагин</option>
+                    </select>
+                    <select id="logPlugin" class="select compact" disabled></select>
+                    <label class="check"><input id="logFollow" type="checkbox" checked> Авто</label>
+                    <button id="logRefresh" class="button tonal" type="button">Обновить</button>
+                    <button id="logClear" class="button text error" type="button">Очистить</button>
+                </div>
+                <pre id="logOutput" class="log-output">загрузка…</pre>
+                <p id="logStateText" class="support mono">—</p>
+                <details id="eventsFeed" class="events-feed">
+                    <summary>Живые события (SSE)</summary>
+                    <div id="eventsList" class="events-list"></div>
+                </details>
+            </details>
+        </section>
+    </main>
+</div>
+
+<!-- ------------------------------------------------- BOTTOM NAV -->
+<nav class="bottom-nav" role="tablist" aria-label="Разделы">
+    <button class="nav-btn active" data-tab="clock" role="tab" aria-selected="true" type="button">
+        <span class="nav-icon">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm0 18a8 8 0 1 1 0-16 8 8 0 0 1 0 16Zm1-13h-2v6l5 3 1-1.7-4-2.3V7Z"/></svg>
+        </span>
+        <span class="nav-label">Часы</span>
+    </button>
+    <button class="nav-btn" data-tab="visualizers" role="tab" aria-selected="false" type="button">
+        <span class="nav-icon">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h3v11H4V9Zm6.5-5h3v16h-3V4ZM17 12h3v8h-3v-8Z"/></svg>
+        </span>
+        <span class="nav-label">Визуализаторы</span>
+    </button>
+    <button class="nav-btn" data-tab="animations" role="tab" aria-selected="false" type="button">
+        <span class="nav-icon">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 4l2 4h-3l-2-4h-2l2 4h-3l-2-4H8l2 4H7L5 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V4h-4Z"/></svg>
+        </span>
+        <span class="nav-label">Анимации</span>
+    </button>
+    <button class="nav-btn" data-tab="general" role="tab" aria-selected="false" type="button">
+        <span class="nav-icon">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.49.49 0 0 0-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.49.49 0 0 0-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.49.49 0 0 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58ZM12 15.6A3.6 3.6 0 1 1 12 8.4a3.6 3.6 0 0 1 0 7.2Z"/></svg>
+        </span>
+        <span class="nav-label">Общие</span>
+    </button>
+</nav>
+
+<!-- ---------------------------------------------------- DIALOG -->
+<div id="mdDialog" class="dialog-scrim" hidden>
+    <div class="dialog" role="alertdialog" aria-modal="true" aria-labelledby="mdDialogTitle" aria-describedby="mdDialogText">
+        <h3 id="mdDialogTitle" class="dialog-title">—</h3>
+        <p id="mdDialogText" class="dialog-text">—</p>
+        <div class="dialog-actions">
+            <button id="mdDialogCancel" class="button text" type="button">Отмена</button>
+            <button id="mdDialogOk" class="button filled danger" type="button">ОК</button>
+        </div>
+    </div>
+</div>
+
+<div id="snackbar" class="snackbar" role="status"></div>
+<script src="/app.js"></script>
+</body>
+</html>

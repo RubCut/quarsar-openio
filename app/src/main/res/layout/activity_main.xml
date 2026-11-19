@@ -1,0 +1,167 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/md3_surface"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="24dp">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/setup_title"
+            android:textColor="@color/md3_on_surface"
+            android:textSize="28sp"
+            android:fontFamily="sans-serif-medium" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="@string/setup_subtitle"
+            android:textColor="@color/md3_on_surface_variant"
+            android:textSize="14sp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:background="@drawable/bg_card"
+            android:orientation="vertical"
+            android:padding="16dp">
+
+            <TextView
+                style="@style/SectionTitle"
+                android:text="@string/status_title" />
+
+            <TextView
+                android:id="@+id/status_root"
+                style="@style/StatusRow"
+                android:text="Root: проверка…" />
+
+            <TextView
+                android:id="@+id/status_autostart"
+                style="@style/StatusRow"
+                android:text="Автозапуск: проверка…" />
+
+            <TextView
+                android:id="@+id/status_service"
+                style="@style/StatusRow"
+                android:text="Сервис: остановлен" />
+
+            <TextView
+                android:id="@+id/status_sdk"
+                style="@style/StatusRow"
+                android:text="io.sdk: неизвестно" />
+
+            <TextView
+                android:id="@+id/status_display"
+                style="@style/StatusRow"
+                android:text="Дисплей: неизвестно" />
+
+            <TextView
+                android:id="@+id/status_audio"
+                style="@style/StatusRow"
+                android:text="Аудио: неизвестно" />
+
+            <TextView
+                android:id="@+id/status_web"
+                style="@style/StatusRow"
+                android:text="Веб: http://127.0.0.1:8080" />
+
+            <TextView
+                android:id="@+id/status_ports"
+                style="@style/StatusRow"
+                android:text="Порты: 8080 HTTP · 8081 IPC · 8082 PCM" />
+        </LinearLayout>
+
+        <CheckBox
+            android:id="@+id/hide_icon"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:checked="true"
+            android:text="Скрыть иконку в лаунчере после настройки"
+            android:textColor="@color/md3_on_surface"
+            android:textSize="14sp" />
+
+        <Button
+            android:id="@+id/button_setup"
+            style="@style/AppButton.Filled"
+            android:layout_marginTop="12dp"
+            android:text="Настроить root, автозапуск и запустить" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/button_start"
+                style="@style/AppButton.Tonal"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="6dp"
+                android:layout_weight="1"
+                android:text="Запустить" />
+
+            <Button
+                android:id="@+id/button_stop"
+                style="@style/AppButton.Error"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:layout_weight="1"
+                android:text="Остановить" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/button_web"
+                style="@style/AppButton.Tonal"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="6dp"
+                android:layout_weight="1"
+                android:text="Открыть веб" />
+
+            <Button
+                android:id="@+id/button_show_icon"
+                style="@style/AppButton.Outlined"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:layout_weight="1"
+                android:text="Вернуть иконку" />
+        </LinearLayout>
+
+        <TextView
+            style="@style/SectionTitle"
+            android:layout_marginTop="24dp"
+            android:text="@string/journal_title" />
+
+        <TextView
+            android:id="@+id/log"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:background="@drawable/bg_log"
+            android:fontFamily="monospace"
+            android:minHeight="120dp"
+            android:padding="12dp"
+            android:textColor="@color/md3_on_surface_variant"
+            android:textIsSelectable="true"
+            android:textSize="12sp" />
+    </LinearLayout>
+</ScrollView>

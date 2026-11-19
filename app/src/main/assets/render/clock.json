@@ -1,0 +1,31 @@
+{
+  "schema": 2,
+  "renderer": "clock",
+  "display": {
+    "width": 25,
+    "height": 16,
+    "pixel_format": "rgb888"
+  },
+  "algorithm": "plain white HH:MM on a black background, drawn with the stock io.sdk glyph atlases (clock_large 5x9, clock_middle 4x7, clock_small 3x5); one blank pixel between glyphs; colon blinks once per second; no progress bar and no other lines",
+  "colors": {
+    "digits": "#FFFFFF",
+    "colon": "#FFFFFF",
+    "background": "#000000"
+  },
+  "size": {
+    "default": "large",
+    "available": ["large", "middle", "small"],
+    "idle_animation": "",
+    "animation": "#FFFFFF"
+  },
+  "ring": {
+    "size": 24,
+    "enabled": true,
+    "dim": "#000000",
+    "active": "#66D9FF",
+    "trail": 0.35,
+    "index_zero": "front centre",
+    "direction": "counterclockwise",
+    "spectrum": true
+  }
+}

@@ -1,0 +1,1940 @@
+{
+  "id": "quasar.yandex-station2",
+  "name": "Яндекс Станция Макс",
+  "version": "1.0.0",
+  "author": "Yandex / quasar.rubcut",
+  "description": "Штатные шаблоны кольца, экранные анимации, часы и визуализатор Станции Макс. 39 активных шаблонов, 39 legacy Quark и 40 Nebula.",
+  "items": [
+    {
+      "id": "clock.yandex",
+      "kind": "screen",
+      "slot": "clock",
+      "name": "Белые часы",
+      "group": "Часы",
+      "builtin": "clock",
+      "description": "Штатные часы станции: белые HH:MM на чёрном, без полос и линий.",
+      "config": [
+        {
+          "key": "clock_size",
+          "label": "Размер",
+          "kind": "select",
+          "default": "large",
+          "options": [
+            {
+              "value": "large",
+              "label": "Крупные"
+            },
+            {
+              "value": "middle",
+              "label": "Средние"
+            },
+            {
+              "value": "small",
+              "label": "Мелкие"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ring.station.privetstvie_02",
+      "kind": "ring",
+      "name": "Приветствие",
+      "group": "Станция",
+      "resource": "led/station/Privetstvie-02.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.station.activating",
+      "kind": "ring",
+      "name": "Активация",
+      "group": "Станция",
+      "resource": "led/station/activating.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.station.alice_listening",
+      "kind": "ring",
+      "name": "Алиса слушает",
+      "group": "Станция",
+      "resource": "led/station/alice_listening.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.station.alice_pro_listening",
+      "kind": "ring",
+      "name": "Алиса Про слушает",
+      "group": "Станция",
+      "resource": "led/station/alice_pro_listening.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.station.alice_pro_speaking",
+      "kind": "ring",
+      "name": "Алиса Про говорит",
+      "group": "Станция",
+      "resource": "led/station/alice_pro_speaking.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.station.alice_pro_thinking",
+      "kind": "ring",
+      "name": "Алиса Про думает",
+      "group": "Станция",
+      "resource": "led/station/alice_pro_thinking.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.station.alice_speaking",
+      "kind": "ring",
+      "name": "Алиса говорит",
+      "group": "Станция",
+      "resource": "led/station/alice_speaking.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.station.alice_thinking",
+      "kind": "ring",
+      "name": "Алиса думает",
+      "group": "Станция",
+      "resource": "led/station/alice_thinking.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.station.alisa_07",
+      "kind": "ring",
+      "name": "Алиса 07",
+      "group": "Станция",
+      "resource": "led/station/alisa-07.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.station.bluetooth_playing",
+      "kind": "ring",
+      "name": "Bluetooth играет",
+      "group": "Станция",
+      "resource": "led/station/bluetooth_playing.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.station.budilnik_12",
+      "kind": "ring",
+      "name": "Будильник",
+      "group": "Станция",
+      "resource": "led/station/budilnik-12.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.station.call_connected",
+      "kind": "ring",
+      "name": "Вызов соединён",
+      "group": "Станция",
+      "resource": "led/station/call_connected.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.station.call_connected_nanny",
+      "kind": "ring",
+      "name": "Вызов с няней",
+      "group": "Станция",
+      "resource": "led/station/call_connected_nanny.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.station.call_connecting",
+      "kind": "ring",
+      "name": "Соединение",
+      "group": "Станция",
+      "resource": "led/station/call_connecting.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.station.call_ended",
+      "kind": "ring",
+      "name": "Вызов завершён",
+      "group": "Станция",
+      "resource": "led/station/call_ended.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.station.call_incoming",
+      "kind": "ring",
+      "name": "Входящий вызов",
+      "group": "Станция",
+      "resource": "led/station/call_incoming.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.station.call_outgoing",
+      "kind": "ring",
+      "name": "Исходящий вызов",
+      "group": "Станция",
+      "resource": "led/station/call_outgoing.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.station.clock_sync_1",
+      "kind": "ring",
+      "name": "Синхронизация часов 1",
+      "group": "Станция",
+      "resource": "led/station/clock_sync_1.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.station.clock_sync_2",
+      "kind": "ring",
+      "name": "Синхронизация часов 2",
+      "group": "Станция",
+      "resource": "led/station/clock_sync_2.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.station.configure",
+      "kind": "ring",
+      "name": "Настройка",
+      "group": "Станция",
+      "resource": "led/station/configure.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.station.configure_long",
+      "kind": "ring",
+      "name": "Настройка (долгая)",
+      "group": "Станция",
+      "resource": "led/station/configure_long.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.station.configure_short",
+      "kind": "ring",
+      "name": "Настройка (короткая)",
+      "group": "Станция",
+      "resource": "led/station/configure_short.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.station.demo_ready",
+      "kind": "ring",
+      "name": "Демо готово",
+      "group": "Станция",
+      "resource": "led/station/demo_ready.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.station.error",
+      "kind": "ring",
+      "name": "Ошибка",
+      "group": "Станция",
+      "resource": "led/station/error.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.station.intonation_spotting",
+      "kind": "ring",
+      "name": "Интонация",
+      "group": "Станция",
+      "resource": "led/station/intonation_spotting.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.station.iot_discovery",
+      "kind": "ring",
+      "name": "Поиск устройств",
+      "group": "Станция",
+      "resource": "led/station/iot_discovery.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.station.mute_mics",
+      "kind": "ring",
+      "name": "Микрофоны выключены",
+      "group": "Станция",
+      "resource": "led/station/mute_mics.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.station.notification_available",
+      "kind": "ring",
+      "name": "Уведомление",
+      "group": "Станция",
+      "resource": "led/station/notification_available.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.station.notification_passive",
+      "kind": "ring",
+      "name": "Уведомление (пассивное)",
+      "group": "Станция",
+      "resource": "led/station/notification_passive.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.station.overflow",
+      "kind": "ring",
+      "name": "Переполнение",
+      "group": "Станция",
+      "resource": "led/station/overflow.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.station.progress",
+      "kind": "ring",
+      "name": "Загрузка",
+      "group": "Станция",
+      "resource": "led/station/progress.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.station.sleep",
+      "kind": "ring",
+      "name": "Сон",
+      "group": "Станция",
+      "resource": "led/station/sleep.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.station.soundinit",
+      "kind": "ring",
+      "name": "Инициализация звука",
+      "group": "Станция",
+      "resource": "led/station/soundinit.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.station.timer",
+      "kind": "ring",
+      "name": "Таймер",
+      "group": "Станция",
+      "resource": "led/station/timer.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.station.vkluchenie_01",
+      "kind": "ring",
+      "name": "Включение",
+      "group": "Станция",
+      "resource": "led/station/vkluchenie-01.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.station.volume",
+      "kind": "ring",
+      "name": "Громкость",
+      "group": "Станция",
+      "resource": "led/station/volume.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.station.zigbee_identification",
+      "kind": "ring",
+      "name": "Zigbee",
+      "group": "Станция",
+      "resource": "led/station/zigbee_identification.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.station.zvuk_net_05",
+      "kind": "ring",
+      "name": "Звук 05",
+      "group": "Станция",
+      "resource": "led/station/zvuk-net-05.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.station.zvuk_net_06",
+      "kind": "ring",
+      "name": "Звук 06",
+      "group": "Станция",
+      "resource": "led/station/zvuk-net-06.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.quark.privetstvie_02",
+      "kind": "ring",
+      "name": "Приветствие",
+      "group": "Quark (legacy)",
+      "resource": "led/quark/Privetstvie-02.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.quark.activating",
+      "kind": "ring",
+      "name": "Активация",
+      "group": "Quark (legacy)",
+      "resource": "led/quark/activating.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.quark.alice_listening",
+      "kind": "ring",
+      "name": "Алиса слушает",
+      "group": "Quark (legacy)",
+      "resource": "led/quark/alice_listening.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.quark.alice_pro_listening",
+      "kind": "ring",
+      "name": "Алиса Про слушает",
+      "group": "Quark (legacy)",
+      "resource": "led/quark/alice_pro_listening.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.quark.alice_pro_speaking",
+      "kind": "ring",
+      "name": "Алиса Про говорит",
+      "group": "Quark (legacy)",
+      "resource": "led/quark/alice_pro_speaking.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.quark.alice_pro_thinking",
+      "kind": "ring",
+      "name": "Алиса Про думает",
+      "group": "Quark (legacy)",
+      "resource": "led/quark/alice_pro_thinking.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.quark.alice_speaking",
+      "kind": "ring",
+      "name": "Алиса говорит",
+      "group": "Quark (legacy)",
+      "resource": "led/quark/alice_speaking.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.quark.alice_thinking",
+      "kind": "ring",
+      "name": "Алиса думает",
+      "group": "Quark (legacy)",
+      "resource": "led/quark/alice_thinking.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.quark.alisa_07",
+      "kind": "ring",
+      "name": "Алиса 07",
+      "group": "Quark (legacy)",
+      "resource": "led/quark/alisa-07.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.quark.bluetooth_playing",
+      "kind": "ring",
+      "name": "Bluetooth играет",
+      "group": "Quark (legacy)",
+      "resource": "led/quark/bluetooth_playing.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.quark.budilnik_12",
+      "kind": "ring",
+      "name": "Будильник",
+      "group": "Quark (legacy)",
+      "resource": "led/quark/budilnik-12.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.quark.call_connected",
+      "kind": "ring",
+      "name": "Вызов соединён",
+      "group": "Quark (legacy)",
+      "resource": "led/quark/call_connected.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.quark.call_connected_nanny",
+      "kind": "ring",
+      "name": "Вызов с няней",
+      "group": "Quark (legacy)",
+      "resource": "led/quark/call_connected_nanny.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.quark.call_connecting",
+      "kind": "ring",
+      "name": "Соединение",
+      "group": "Quark (legacy)",
+      "resource": "led/quark/call_connecting.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.quark.call_ended",
+      "kind": "ring",
+      "name": "Вызов завершён",
+      "group": "Quark (legacy)",
+      "resource": "led/quark/call_ended.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.quark.call_incoming",
+      "kind": "ring",
+      "name": "Входящий вызов",
+      "group": "Quark (legacy)",
+      "resource": "led/quark/call_incoming.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.quark.call_outgoing",
+      "kind": "ring",
+      "name": "Исходящий вызов",
+      "group": "Quark (legacy)",
+      "resource": "led/quark/call_outgoing.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.quark.clock_sync_1",
+      "kind": "ring",
+      "name": "Синхронизация часов 1",
+      "group": "Quark (legacy)",
+      "resource": "led/quark/clock_sync_1.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.quark.clock_sync_2",
+      "kind": "ring",
+      "name": "Синхронизация часов 2",
+      "group": "Quark (legacy)",
+      "resource": "led/quark/clock_sync_2.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.quark.configure",
+      "kind": "ring",
+      "name": "Настройка",
+      "group": "Quark (legacy)",
+      "resource": "led/quark/configure.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.quark.configure_long",
+      "kind": "ring",
+      "name": "Настройка (долгая)",
+      "group": "Quark (legacy)",
+      "resource": "led/quark/configure_long.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.quark.configure_short",
+      "kind": "ring",
+      "name": "Настройка (короткая)",
+      "group": "Quark (legacy)",
+      "resource": "led/quark/configure_short.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.quark.demo_ready",
+      "kind": "ring",
+      "name": "Демо готово",
+      "group": "Quark (legacy)",
+      "resource": "led/quark/demo_ready.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.quark.error",
+      "kind": "ring",
+      "name": "Ошибка",
+      "group": "Quark (legacy)",
+      "resource": "led/quark/error.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.quark.intonation_spotting",
+      "kind": "ring",
+      "name": "Интонация",
+      "group": "Quark (legacy)",
+      "resource": "led/quark/intonation_spotting.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.quark.iot_discovery",
+      "kind": "ring",
+      "name": "Поиск устройств",
+      "group": "Quark (legacy)",
+      "resource": "led/quark/iot_discovery.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.quark.mute_mics",
+      "kind": "ring",
+      "name": "Микрофоны выключены",
+      "group": "Quark (legacy)",
+      "resource": "led/quark/mute_mics.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.quark.notification_available",
+      "kind": "ring",
+      "name": "Уведомление",
+      "group": "Quark (legacy)",
+      "resource": "led/quark/notification_available.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.quark.notification_passive",
+      "kind": "ring",
+      "name": "Уведомление (пассивное)",
+      "group": "Quark (legacy)",
+      "resource": "led/quark/notification_passive.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.quark.overflow",
+      "kind": "ring",
+      "name": "Переполнение",
+      "group": "Quark (legacy)",
+      "resource": "led/quark/overflow.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.quark.progress",
+      "kind": "ring",
+      "name": "Загрузка",
+      "group": "Quark (legacy)",
+      "resource": "led/quark/progress.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.quark.sleep",
+      "kind": "ring",
+      "name": "Сон",
+      "group": "Quark (legacy)",
+      "resource": "led/quark/sleep.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.quark.soundinit",
+      "kind": "ring",
+      "name": "Инициализация звука",
+      "group": "Quark (legacy)",
+      "resource": "led/quark/soundinit.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.quark.timer",
+      "kind": "ring",
+      "name": "Таймер",
+      "group": "Quark (legacy)",
+      "resource": "led/quark/timer.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.quark.vkluchenie_01",
+      "kind": "ring",
+      "name": "Включение",
+      "group": "Quark (legacy)",
+      "resource": "led/quark/vkluchenie-01.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.quark.volume",
+      "kind": "ring",
+      "name": "Громкость",
+      "group": "Quark (legacy)",
+      "resource": "led/quark/volume.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.quark.zigbee_identification",
+      "kind": "ring",
+      "name": "Zigbee",
+      "group": "Quark (legacy)",
+      "resource": "led/quark/zigbee_identification.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.quark.zvuk_net_05",
+      "kind": "ring",
+      "name": "Звук 05",
+      "group": "Quark (legacy)",
+      "resource": "led/quark/zvuk-net-05.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.quark.zvuk_net_06",
+      "kind": "ring",
+      "name": "Звук 06",
+      "group": "Quark (legacy)",
+      "resource": "led/quark/zvuk-net-06.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.nebula.activating",
+      "kind": "ring",
+      "name": "Активация",
+      "group": "Nebula",
+      "resource": "led/nebula/activating.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.nebula.alarm_clock",
+      "kind": "ring",
+      "name": "Будильник",
+      "group": "Nebula",
+      "resource": "led/nebula/alarm_clock.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.nebula.bluetooth_connected",
+      "kind": "ring",
+      "name": "Bluetooth подключён",
+      "group": "Nebula",
+      "resource": "led/nebula/bluetooth_connected.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.nebula.bluetooth_disconnected",
+      "kind": "ring",
+      "name": "Bluetooth отключён",
+      "group": "Nebula",
+      "resource": "led/nebula/bluetooth_disconnected.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.nebula.bluetooth_pairing",
+      "kind": "ring",
+      "name": "Bluetooth сопряжение",
+      "group": "Nebula",
+      "resource": "led/nebula/bluetooth_pairing.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.nebula.bluetooth_playing",
+      "kind": "ring",
+      "name": "Bluetooth играет",
+      "group": "Nebula",
+      "resource": "led/nebula/bluetooth_playing.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.nebula.call_connected",
+      "kind": "ring",
+      "name": "Вызов соединён",
+      "group": "Nebula",
+      "resource": "led/nebula/call_connected.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.nebula.call_disconnect",
+      "kind": "ring",
+      "name": "Вызов отключён",
+      "group": "Nebula",
+      "resource": "led/nebula/call_disconnect.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.nebula.call_ringing",
+      "kind": "ring",
+      "name": "Вызов звонит",
+      "group": "Nebula",
+      "resource": "led/nebula/call_ringing.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.nebula.configure",
+      "kind": "ring",
+      "name": "Настройка",
+      "group": "Nebula",
+      "resource": "led/nebula/configure.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.nebula.error",
+      "kind": "ring",
+      "name": "Ошибка",
+      "group": "Nebula",
+      "resource": "led/nebula/error.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.nebula.first_activation_v2",
+      "kind": "ring",
+      "name": "Первая активация",
+      "group": "Nebula",
+      "resource": "led/nebula/first_activation_v2.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.nebula.internet_connect",
+      "kind": "ring",
+      "name": "Интернет подключён",
+      "group": "Nebula",
+      "resource": "led/nebula/internet_connect.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.nebula.iot_connect",
+      "kind": "ring",
+      "name": "IoT подключён",
+      "group": "Nebula",
+      "resource": "led/nebula/iot_connect.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.nebula.iot_discovery",
+      "kind": "ring",
+      "name": "Поиск устройств",
+      "group": "Nebula",
+      "resource": "led/nebula/iot_discovery.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.nebula.listen",
+      "kind": "ring",
+      "name": "Слушание",
+      "group": "Nebula",
+      "resource": "led/nebula/listen.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.nebula.listen_active_basic",
+      "kind": "ring",
+      "name": "Слушание активно",
+      "group": "Nebula",
+      "resource": "led/nebula/listen_active_basic.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.nebula.listen_active_pro",
+      "kind": "ring",
+      "name": "Слушание активно (Про)",
+      "group": "Nebula",
+      "resource": "led/nebula/listen_active_pro.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.nebula.listen_in_basic",
+      "kind": "ring",
+      "name": "Слушание",
+      "group": "Nebula",
+      "resource": "led/nebula/listen_in_basic.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.nebula.listen_in_pro",
+      "kind": "ring",
+      "name": "Слушание (Про)",
+      "group": "Nebula",
+      "resource": "led/nebula/listen_in_pro.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.nebula.listen_out_basic",
+      "kind": "ring",
+      "name": "Ответ",
+      "group": "Nebula",
+      "resource": "led/nebula/listen_out_basic.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.nebula.listen_out_pro",
+      "kind": "ring",
+      "name": "Ответ (Про)",
+      "group": "Nebula",
+      "resource": "led/nebula/listen_out_pro.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.nebula.mute_mic",
+      "kind": "ring",
+      "name": "Микрофон выключен",
+      "group": "Nebula",
+      "resource": "led/nebula/mute_mic.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.nebula.ota_applying",
+      "kind": "ring",
+      "name": "OTA установка",
+      "group": "Nebula",
+      "resource": "led/nebula/ota_applying.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.nebula.ota_downloading",
+      "kind": "ring",
+      "name": "OTA загрузка",
+      "group": "Nebula",
+      "resource": "led/nebula/ota_downloading.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.nebula.play_continue",
+      "kind": "ring",
+      "name": "Продолжить",
+      "group": "Nebula",
+      "resource": "led/nebula/play_continue.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.nebula.player_next_track",
+      "kind": "ring",
+      "name": "Следующий трек",
+      "group": "Nebula",
+      "resource": "led/nebula/player_next_track.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.nebula.player_pause",
+      "kind": "ring",
+      "name": "Пауза",
+      "group": "Nebula",
+      "resource": "led/nebula/player_pause.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.nebula.player_prev_track",
+      "kind": "ring",
+      "name": "Предыдущий трек",
+      "group": "Nebula",
+      "resource": "led/nebula/player_prev_track.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.nebula.soundinit",
+      "kind": "ring",
+      "name": "Инициализация звука",
+      "group": "Nebula",
+      "resource": "led/nebula/soundinit.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.nebula.speak",
+      "kind": "ring",
+      "name": "Говорит",
+      "group": "Nebula",
+      "resource": "led/nebula/speak.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.nebula.thinking",
+      "kind": "ring",
+      "name": "Думает",
+      "group": "Nebula",
+      "resource": "led/nebula/thinking.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.nebula.thinking_basic",
+      "kind": "ring",
+      "name": "Думает (базово)",
+      "group": "Nebula",
+      "resource": "led/nebula/thinking_basic.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.nebula.thinking_pro",
+      "kind": "ring",
+      "name": "Думает (Про)",
+      "group": "Nebula",
+      "resource": "led/nebula/thinking_pro.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.nebula.timer_clock",
+      "kind": "ring",
+      "name": "Таймер",
+      "group": "Nebula",
+      "resource": "led/nebula/timer_clock.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.nebula.unmute_mic",
+      "kind": "ring",
+      "name": "Микрофон включён",
+      "group": "Nebula",
+      "resource": "led/nebula/unmute_mic.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.nebula.vinyl_mode_ring",
+      "kind": "ring",
+      "name": "Винил",
+      "group": "Nebula",
+      "resource": "led/nebula/vinyl_mode_ring.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.nebula.volume",
+      "kind": "ring",
+      "name": "Громкость",
+      "group": "Nebula",
+      "resource": "led/nebula/volume.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.nebula.zigbee_blink",
+      "kind": "ring",
+      "name": "Zigbee мигает",
+      "group": "Nebula",
+      "resource": "led/nebula/zigbee_blink.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "ring.nebula.zigbee_identity",
+      "kind": "ring",
+      "name": "Zigbee",
+      "group": "Nebula",
+      "resource": "led/nebula/zigbee_identity.led",
+      "description": "Шаблон кольца из прошивки Яндекс Станции."
+    },
+    {
+      "id": "events.alice",
+      "kind": "script",
+      "name": "Событие: кнопка Алисы",
+      "group": "Обработчики",
+      "entry": "scripts/on_alice.sh",
+      "events": [
+        "alice_pressed"
+      ],
+      "description": "Пример обработчика: получает JSON события и отвечает командой notify."
+    },
+    {
+      "id": "anim.25x16_clock",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "Clock",
+      "group": "root",
+      "resource": "builtin:anim/25x16_Clock.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.25x16_error",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "Error",
+      "group": "root",
+      "resource": "builtin:anim/25x16_Error.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.25x16_progress_1",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "Progress 1",
+      "group": "root",
+      "resource": "builtin:anim/25x16_Progress_1.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.alarm_25x16_alarm_loop",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "alarm/25x16 alarm loop",
+      "group": "alarm",
+      "resource": "builtin:anim/alarm/25x16_alarm_loop.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.bluetooth_25x16_bluetooth_connect",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "bluetooth/25x16 Bluetooth Connect",
+      "group": "bluetooth",
+      "resource": "builtin:anim/bluetooth/25x16_Bluetooth_Connect.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.bluetooth_25x16_bluetooth_disconnect",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "bluetooth/25x16 Bluetooth Disconnect",
+      "group": "bluetooth",
+      "resource": "builtin:anim/bluetooth/25x16_Bluetooth_Disconnect.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.boot_25x16_firstboot_loadloop01",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "boot/25x16 FirstBoot LoadLoop01",
+      "group": "boot",
+      "resource": "builtin:anim/boot/25x16_FirstBoot_LoadLoop01.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.boot_25x16_firstboot_loadloop02",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "boot/25x16 FirstBoot LoadLoop02",
+      "group": "boot",
+      "resource": "builtin:anim/boot/25x16_FirstBoot_LoadLoop02.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.boot_25x16_firstboot_mainbody",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "boot/25x16 FirstBoot MainBody",
+      "group": "boot",
+      "resource": "builtin:anim/boot/25x16_FirstBoot_MainBody.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.calls_call_active",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "calls/call active",
+      "group": "calls",
+      "resource": "builtin:anim/calls/call_active.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.calls_call_ended",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "calls/call ended",
+      "group": "calls",
+      "resource": "builtin:anim/calls/call_ended.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.calls_call_hold",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "calls/call hold",
+      "group": "calls",
+      "resource": "builtin:anim/calls/call_hold.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.calls_call_incoming_appearance",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "calls/call incoming appearance",
+      "group": "calls",
+      "resource": "builtin:anim/calls/call_incoming_appearance.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.calls_call_incoming_ringing",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "calls/call incoming ringing",
+      "group": "calls",
+      "resource": "builtin:anim/calls/call_incoming_ringing.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.calls_call_outgoing",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "calls/call outgoing",
+      "group": "calls",
+      "resource": "builtin:anim/calls/call_outgoing.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.emotion_joy",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "emotion/joy",
+      "group": "emotion",
+      "resource": "builtin:anim/emotion/joy.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.emotion_surprise",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "emotion/surprise",
+      "group": "emotion",
+      "resource": "builtin:anim/emotion/surprise.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.media_25x16_dislike",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "media/25x16 Dislike",
+      "group": "media",
+      "resource": "builtin:anim/media/25x16_Dislike.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.media_25x16_error",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "media/25x16 Error",
+      "group": "media",
+      "resource": "builtin:anim/media/25x16_Error.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.media_25x16_like",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "media/25x16 Like",
+      "group": "media",
+      "resource": "builtin:anim/media/25x16_Like.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.media_25x16_like_fast",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "media/25x16 Like Fast",
+      "group": "media",
+      "resource": "builtin:anim/media/25x16_Like_Fast.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.media_25x16_next",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "media/25x16 Next",
+      "group": "media",
+      "resource": "builtin:anim/media/25x16_Next.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.media_25x16_pause",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "media/25x16 Pause",
+      "group": "media",
+      "resource": "builtin:anim/media/25x16_Pause.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.media_25x16_previous",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "media/25x16 Previous",
+      "group": "media",
+      "resource": "builtin:anim/media/25x16_Previous.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.media_25x16_resume",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "media/25x16 Resume",
+      "group": "media",
+      "resource": "builtin:anim/media/25x16_Resume.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.mics_25x16_mics_off",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "mics/25x16 Mics Off",
+      "group": "mics",
+      "resource": "builtin:anim/mics/25x16_Mics_Off.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.mics_25x16_mics_on",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "mics/25x16 Mics On",
+      "group": "mics",
+      "resource": "builtin:anim/mics/25x16_Mics_On.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.oknix_00_out",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "oknix/00-out",
+      "group": "oknix",
+      "resource": "builtin:anim/oknix/00-out.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.oknix_01_activation",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "oknix/01-activation",
+      "group": "oknix",
+      "resource": "builtin:anim/oknix/01-activation.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.oknix_02_activation_to_listening",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "oknix/02-activation-to-listening",
+      "group": "oknix",
+      "resource": "builtin:anim/oknix/02-activation-to-listening.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.oknix_03_listening_loop",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "oknix/03-listening-loop",
+      "group": "oknix",
+      "resource": "builtin:anim/oknix/03-listening-loop.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.oknix_04_listening_to_answer",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "oknix/04-listening-to-answer",
+      "group": "oknix",
+      "resource": "builtin:anim/oknix/04-listening-to-answer.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.oknix_05_thinking_loop",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "oknix/05-thinking-loop",
+      "group": "oknix",
+      "resource": "builtin:anim/oknix/05-thinking-loop.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.oknix_06_answer_loop",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "oknix/06-answer-loop",
+      "group": "oknix",
+      "resource": "builtin:anim/oknix/06-answer-loop.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.orchestra_25x16_bassoon",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "orchestra/25x16 bassoon",
+      "group": "orchestra",
+      "resource": "builtin:anim/orchestra/25x16_bassoon.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.orchestra_25x16_cello",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "orchestra/25x16 cello",
+      "group": "orchestra",
+      "resource": "builtin:anim/orchestra/25x16_cello.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.orchestra_25x16_clarinet",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "orchestra/25x16 clarinet",
+      "group": "orchestra",
+      "resource": "builtin:anim/orchestra/25x16_clarinet.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.orchestra_25x16_contrabass",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "orchestra/25x16 contrabass",
+      "group": "orchestra",
+      "resource": "builtin:anim/orchestra/25x16_contrabass.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.orchestra_25x16_flute",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "orchestra/25x16 flute",
+      "group": "orchestra",
+      "resource": "builtin:anim/orchestra/25x16_flute.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.orchestra_25x16_harp",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "orchestra/25x16 harp",
+      "group": "orchestra",
+      "resource": "builtin:anim/orchestra/25x16_harp.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.orchestra_25x16_harpsichord",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "orchestra/25x16 harpsichord",
+      "group": "orchestra",
+      "resource": "builtin:anim/orchestra/25x16_harpsichord.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.orchestra_25x16_note",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "orchestra/25x16 note",
+      "group": "orchestra",
+      "resource": "builtin:anim/orchestra/25x16_note.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.orchestra_25x16_oboe",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "orchestra/25x16 oboe",
+      "group": "orchestra",
+      "resource": "builtin:anim/orchestra/25x16_oboe.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.orchestra_25x16_percussion",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "orchestra/25x16 percussion",
+      "group": "orchestra",
+      "resource": "builtin:anim/orchestra/25x16_percussion.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.orchestra_25x16_viola",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "orchestra/25x16 viola",
+      "group": "orchestra",
+      "resource": "builtin:anim/orchestra/25x16_viola.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.orchestra_25x16_violin",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "orchestra/25x16 violin",
+      "group": "orchestra",
+      "resource": "builtin:anim/orchestra/25x16_violin.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.rcu_volume_volume_edge_0",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "Громкость/Громкость край/0",
+      "group": "rcu_volume",
+      "resource": "builtin:anim/rcu_volume/volume_edge/0.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.rcu_volume_volume_edge_10",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "Громкость/Громкость край/10",
+      "group": "rcu_volume",
+      "resource": "builtin:anim/rcu_volume/volume_edge/10.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.rcu_volume_volume_pulse_down_0",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "Громкость/Громкость импульс/down/0",
+      "group": "rcu_volume",
+      "resource": "builtin:anim/rcu_volume/volume_pulse/down/0.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.rcu_volume_volume_pulse_down_1",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "Громкость/Громкость импульс/down/1",
+      "group": "rcu_volume",
+      "resource": "builtin:anim/rcu_volume/volume_pulse/down/1.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.rcu_volume_volume_pulse_down_10",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "Громкость/Громкость импульс/down/10",
+      "group": "rcu_volume",
+      "resource": "builtin:anim/rcu_volume/volume_pulse/down/10.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.rcu_volume_volume_pulse_down_2",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "Громкость/Громкость импульс/down/2",
+      "group": "rcu_volume",
+      "resource": "builtin:anim/rcu_volume/volume_pulse/down/2.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.rcu_volume_volume_pulse_down_3",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "Громкость/Громкость импульс/down/3",
+      "group": "rcu_volume",
+      "resource": "builtin:anim/rcu_volume/volume_pulse/down/3.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.rcu_volume_volume_pulse_down_4",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "Громкость/Громкость импульс/down/4",
+      "group": "rcu_volume",
+      "resource": "builtin:anim/rcu_volume/volume_pulse/down/4.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.rcu_volume_volume_pulse_down_5",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "Громкость/Громкость импульс/down/5",
+      "group": "rcu_volume",
+      "resource": "builtin:anim/rcu_volume/volume_pulse/down/5.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.rcu_volume_volume_pulse_down_6",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "Громкость/Громкость импульс/down/6",
+      "group": "rcu_volume",
+      "resource": "builtin:anim/rcu_volume/volume_pulse/down/6.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.rcu_volume_volume_pulse_down_7",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "Громкость/Громкость импульс/down/7",
+      "group": "rcu_volume",
+      "resource": "builtin:anim/rcu_volume/volume_pulse/down/7.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.rcu_volume_volume_pulse_down_8",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "Громкость/Громкость импульс/down/8",
+      "group": "rcu_volume",
+      "resource": "builtin:anim/rcu_volume/volume_pulse/down/8.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.rcu_volume_volume_pulse_down_9",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "Громкость/Громкость импульс/down/9",
+      "group": "rcu_volume",
+      "resource": "builtin:anim/rcu_volume/volume_pulse/down/9.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.rcu_volume_volume_pulse_up_0",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "Громкость/Громкость импульс/up/0",
+      "group": "rcu_volume",
+      "resource": "builtin:anim/rcu_volume/volume_pulse/up/0.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.rcu_volume_volume_pulse_up_1",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "Громкость/Громкость импульс/up/1",
+      "group": "rcu_volume",
+      "resource": "builtin:anim/rcu_volume/volume_pulse/up/1.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.rcu_volume_volume_pulse_up_10",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "Громкость/Громкость импульс/up/10",
+      "group": "rcu_volume",
+      "resource": "builtin:anim/rcu_volume/volume_pulse/up/10.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.rcu_volume_volume_pulse_up_2",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "Громкость/Громкость импульс/up/2",
+      "group": "rcu_volume",
+      "resource": "builtin:anim/rcu_volume/volume_pulse/up/2.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.rcu_volume_volume_pulse_up_3",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "Громкость/Громкость импульс/up/3",
+      "group": "rcu_volume",
+      "resource": "builtin:anim/rcu_volume/volume_pulse/up/3.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.rcu_volume_volume_pulse_up_4",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "Громкость/Громкость импульс/up/4",
+      "group": "rcu_volume",
+      "resource": "builtin:anim/rcu_volume/volume_pulse/up/4.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.rcu_volume_volume_pulse_up_5",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "Громкость/Громкость импульс/up/5",
+      "group": "rcu_volume",
+      "resource": "builtin:anim/rcu_volume/volume_pulse/up/5.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.rcu_volume_volume_pulse_up_6",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "Громкость/Громкость импульс/up/6",
+      "group": "rcu_volume",
+      "resource": "builtin:anim/rcu_volume/volume_pulse/up/6.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.rcu_volume_volume_pulse_up_7",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "Громкость/Громкость импульс/up/7",
+      "group": "rcu_volume",
+      "resource": "builtin:anim/rcu_volume/volume_pulse/up/7.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.rcu_volume_volume_pulse_up_8",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "Громкость/Громкость импульс/up/8",
+      "group": "rcu_volume",
+      "resource": "builtin:anim/rcu_volume/volume_pulse/up/8.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.rcu_volume_volume_pulse_up_9",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "Громкость/Громкость импульс/up/9",
+      "group": "rcu_volume",
+      "resource": "builtin:anim/rcu_volume/volume_pulse/up/9.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.rcu_volume_volume_rotation_down_1",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "Громкость/Громкость поворот/down/1",
+      "group": "rcu_volume",
+      "resource": "builtin:anim/rcu_volume/volume_rotation/down/1.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.rcu_volume_volume_rotation_down_10",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "Громкость/Громкость поворот/down/10",
+      "group": "rcu_volume",
+      "resource": "builtin:anim/rcu_volume/volume_rotation/down/10.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.rcu_volume_volume_rotation_down_2",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "Громкость/Громкость поворот/down/2",
+      "group": "rcu_volume",
+      "resource": "builtin:anim/rcu_volume/volume_rotation/down/2.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.rcu_volume_volume_rotation_down_3",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "Громкость/Громкость поворот/down/3",
+      "group": "rcu_volume",
+      "resource": "builtin:anim/rcu_volume/volume_rotation/down/3.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.rcu_volume_volume_rotation_down_4",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "Громкость/Громкость поворот/down/4",
+      "group": "rcu_volume",
+      "resource": "builtin:anim/rcu_volume/volume_rotation/down/4.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.rcu_volume_volume_rotation_down_5",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "Громкость/Громкость поворот/down/5",
+      "group": "rcu_volume",
+      "resource": "builtin:anim/rcu_volume/volume_rotation/down/5.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.rcu_volume_volume_rotation_down_6",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "Громкость/Громкость поворот/down/6",
+      "group": "rcu_volume",
+      "resource": "builtin:anim/rcu_volume/volume_rotation/down/6.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.rcu_volume_volume_rotation_down_7",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "Громкость/Громкость поворот/down/7",
+      "group": "rcu_volume",
+      "resource": "builtin:anim/rcu_volume/volume_rotation/down/7.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.rcu_volume_volume_rotation_down_8",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "Громкость/Громкость поворот/down/8",
+      "group": "rcu_volume",
+      "resource": "builtin:anim/rcu_volume/volume_rotation/down/8.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.rcu_volume_volume_rotation_down_9",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "Громкость/Громкость поворот/down/9",
+      "group": "rcu_volume",
+      "resource": "builtin:anim/rcu_volume/volume_rotation/down/9.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.rcu_volume_volume_rotation_up_0",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "Громкость/Громкость поворот/up/0",
+      "group": "rcu_volume",
+      "resource": "builtin:anim/rcu_volume/volume_rotation/up/0.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.rcu_volume_volume_rotation_up_1",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "Громкость/Громкость поворот/up/1",
+      "group": "rcu_volume",
+      "resource": "builtin:anim/rcu_volume/volume_rotation/up/1.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.rcu_volume_volume_rotation_up_2",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "Громкость/Громкость поворот/up/2",
+      "group": "rcu_volume",
+      "resource": "builtin:anim/rcu_volume/volume_rotation/up/2.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.rcu_volume_volume_rotation_up_3",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "Громкость/Громкость поворот/up/3",
+      "group": "rcu_volume",
+      "resource": "builtin:anim/rcu_volume/volume_rotation/up/3.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.rcu_volume_volume_rotation_up_4",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "Громкость/Громкость поворот/up/4",
+      "group": "rcu_volume",
+      "resource": "builtin:anim/rcu_volume/volume_rotation/up/4.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.rcu_volume_volume_rotation_up_5",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "Громкость/Громкость поворот/up/5",
+      "group": "rcu_volume",
+      "resource": "builtin:anim/rcu_volume/volume_rotation/up/5.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.rcu_volume_volume_rotation_up_6",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "Громкость/Громкость поворот/up/6",
+      "group": "rcu_volume",
+      "resource": "builtin:anim/rcu_volume/volume_rotation/up/6.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.rcu_volume_volume_rotation_up_7",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "Громкость/Громкость поворот/up/7",
+      "group": "rcu_volume",
+      "resource": "builtin:anim/rcu_volume/volume_rotation/up/7.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.rcu_volume_volume_rotation_up_8",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "Громкость/Громкость поворот/up/8",
+      "group": "rcu_volume",
+      "resource": "builtin:anim/rcu_volume/volume_rotation/up/8.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.rcu_volume_volume_rotation_up_9",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "Громкость/Громкость поворот/up/9",
+      "group": "rcu_volume",
+      "resource": "builtin:anim/rcu_volume/volume_rotation/up/9.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.scenario_emotion_25x16_activation_output",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "scenario emotion/25x16 Activation Output",
+      "group": "scenario_emotion",
+      "resource": "builtin:anim/scenario_emotion/25x16_Activation_Output.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.scenario_emotion_25x16_confirmation_output",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "scenario emotion/25x16 Confirmation Output",
+      "group": "scenario_emotion",
+      "resource": "builtin:anim/scenario_emotion/25x16_Confirmation_Output.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.scenario_emotion_25x16_deactivation_output",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "scenario emotion/25x16 Deactivation Output",
+      "group": "scenario_emotion",
+      "resource": "builtin:anim/scenario_emotion/25x16_Deactivation_Output.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.scenario_emotion_25x16_half_listening_loop_output",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "scenario emotion/25x16 Half-Listening Loop Output",
+      "group": "scenario_emotion",
+      "resource": "builtin:anim/scenario_emotion/25x16_Half-Listening_Loop_Output.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.scenario_emotion_25x16_listening_loop_output",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "scenario emotion/25x16 Listening Loop Output",
+      "group": "scenario_emotion",
+      "resource": "builtin:anim/scenario_emotion/25x16_Listening_Loop_Output.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.scenario_emotion_25x16_long_activation_output",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "scenario emotion/25x16 Long Activation Output",
+      "group": "scenario_emotion",
+      "resource": "builtin:anim/scenario_emotion/25x16_Long_Activation_Output.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.scenario_emotion_25x16_smile_animatein_output",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "scenario emotion/25x16 Smile AnimateIn Output",
+      "group": "scenario_emotion",
+      "resource": "builtin:anim/scenario_emotion/25x16_Smile_AnimateIn_Output.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.scenario_emotion_25x16_smile_animateout_output",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "scenario emotion/25x16 Smile AnimateOut Output",
+      "group": "scenario_emotion",
+      "resource": "builtin:anim/scenario_emotion/25x16_Smile_AnimateOut_Output.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.scenario_emotion_25x16_smile_neutral_output",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "scenario emotion/25x16 Smile Neutral Output",
+      "group": "scenario_emotion",
+      "resource": "builtin:anim/scenario_emotion/25x16_Smile_Neutral_Output.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.scenario_emotion_25x16_smile_wink_output",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "scenario emotion/25x16 Smile Wink Output",
+      "group": "scenario_emotion",
+      "resource": "builtin:anim/scenario_emotion/25x16_Smile_Wink_Output.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.sound_mute",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "sound mute",
+      "group": "root",
+      "resource": "builtin:anim/sound_mute.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.timer_25x16_timer_bell",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "timer/25x16 timer bell",
+      "group": "timer",
+      "resource": "builtin:anim/timer/25x16_timer_bell.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.timer_25x16_timer_loop",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "timer/25x16 timer loop",
+      "group": "timer",
+      "resource": "builtin:anim/timer/25x16_timer_loop.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.video",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "video",
+      "group": "root",
+      "resource": "builtin:anim/video.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    },
+    {
+      "id": "anim.whole_volume",
+      "kind": "screen",
+      "slot": "animation",
+      "name": "whole volume",
+      "group": "root",
+      "resource": "builtin:anim/whole_volume.gif",
+      "description": "Экранная анимация из штатного набора станции."
+    }
+  ]
+}

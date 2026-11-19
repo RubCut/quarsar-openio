@@ -1,456 +1,626 @@
-# quasar-openio
+# Quasar OpenIO
 
-Открытый системный демон `quasar_openio` для Yandex Station Max (`YNDX-0008`,
-`yandexstation_2`, Android 9 / ARM64).
+Скрытый foreground-сервис для Яндекс Станции Макс (`YNDX-0008`, Android 9,
+ARM64, KernelSU Next). Управляет 25×16 экраном и 24-сегментным кольцом через
+`mmap`, читает Алису/громкость/пульт через `poll()`, снимает микс
+воспроизведения 16 кГц mono штатным Android-эффектом `Visualizer`, выводит
+звук прямым `AudioTrack`. `com.yandex.io.sdk` по умолчанию **не замораживается**:
+Алиса сохраняет микрофон, а `SIGSTOP` остаётся только ручной сервисной
+командой.
 
-Демон — **супервизор**: он запускает бинарник плагина с аргументом-режимом,
-наблюдает кнопки/громкость/микрофон, управляет состоянием музыки и жизненным
-циклом процесса. **Экран и кольцо рисует сам плагин** через `mmap` fb4 и fb5 —
-кольцо точно так же, как экран. Демон не ретранслирует кадры и не пишет в
-framebuffer, пока плагин загружен. Дополнительно демон умеет
-замораживать/размораживать `com.yandex.io.sdk` сигналами и принимает PCM-поток
-с выдачей его по loopback HTTP и в pipe визуализатора.
+Пакет: `quasar.rubcut.openio`. Старые наработки `quarsar-openio` не
+используются.
 
-**Важно:** это userspace-демон, а не замена драйверов ядра. Он не отключает и не
-удаляет `com.yandex.io.sdk`, не пишет в `/system`, `/vendor`, `/boot`, не меняет
-разрешение экрана, не вызывает `FBIOPUT_*`, не использует `system()`/`popen()` и
-не запускает shell-команды из обработчиков событий.
-
-## Статус проверки
-
-Реализовано и проверено на host:
-
-- строгая сборка GCC с `-Werror`;
-- интеграционные тесты JSON/Unix socket, framebuffer `mmap` со stride/padding,
-  input-событий, `SIGSTOP`/`SIGCONT`, восстановления после `SIGKILL` демона,
-  PCM→HTTP, ограничения очередей и очистки по `SIGTERM`;
-- ASan/UBSan-прогон;
-- тесты OTA-скрипта с mock `iptables`/`ip6tables`;
-- стандартный плагин `quasar_pack`: часы, визуализатор и 12 анимаций, экран и
-  кольцо рисуются самим плагином через mmap fb4/fb5;
-- host-тесты плагина: fb4 пишется, fb5 не трогается в idle/визуализаторе,
-  анимации сами рисуют и гасят кольцо, padding строк не пишется;
-- host-тесты супервизора: контракт запуска, кнопки, музыкальные переходы,
-  отказ от `draw_*` при загруженном плагине, пожинание ребёнка;
-- статическая PIE cross-сборка ELF64 AArch64 без `INTERP` через `zig cc -target
-  aarch64-linux-musl -static-pie` для демона и пака.
-
-**Не проверено на реальной станции в этой среде:** Amlogic LED-драйвер,
-SELinux-домен, поведение `io.sdk` при заморозке, совместимость HTTP/WAV со штатным
-плеером, Docker-сборка и длительную работу под нагрузкой. Перед развёртыванием
-выполните чек-лист ниже.
-
-Вложенный `quasar-daemon-11-05.jpeg` оказался ZIP-архивом с предыдущей реализацией.
-Он был распакован и изучен как справочный материал; готовые бинарники из архива не
-использовались и не запускались.
-
-## Состав
+## Архитектура
 
 ```text
-include/quasar_openio.h     общие структуры и лимиты
-src/                        супервизор: main, plugin, IPC, JSON, fb, input, SDK, audio
-pack/                       плагин: часы, визуализатор, анимации, mmap fb4+fb5
-init/quasar_openio.rc       Android init service для /odm/etc/init
-plugins/standard/plugin.conf манифест стандартного плагина
-scripts/install_odm.sh      осторожная установка в /odm, по умолчанию dry-run
-scripts/quasar_block_ota.sh блокировка OTA-адресов, по умолчанию dry-run
-sepolicy/                   справочная SELinux-политика, не загружается автоматически
-tools/fb_info.c             read-only probe геометрии framebuffer
-docs/PACK.md                документация стандартного плагина
-examples/                   Python-примеры клиента и PCM-отправителя
-tests/                      host-тесты,fixture-библиотека, mock iptables
-Dockerfile                  статическая сборка на arm64v8/alpine
+domain/   чистый Kotlin/JVM, без Android API
+  model/      ScreenFrame, RingFrame, QuasarMode (включая AUTO), InputEvent, AudioChunk
+  render/     Font4x7, ClockRenderer, OscilloscopeRenderer, RingSpectrumRenderer,
+              GifDecoder, TestPatternRenderer
+  led/        LedPattern, LedPatternParser (loop, gradient, smooth, rotate)
+  audio/      Pcm, PcmRingBuffer, BandPass, ScopeBand
+  plugin/     PluginPack, PluginProvider, ConfigField, ProviderType
+  port/       ScreenOutput, RingOutput, InputSource, AudioCapture, AudioSink
+  QuasarEngine  режимы, рендер, кольцевые шаблоны, полосовой фильтр, приём PCM
+
+app/      Android + NDK
+  data/display/NativeDisplay       JNI → mmap fb4/fb5, отдельный C++ поток
+  data/input/NativeInput           JNI → poll() event0/event2/event4
+  data/input/InputMapper           коды клавиш → alice_pressed, volume_up, ...
+  data/audio/VisualizerAudioSource  Visualizer (микс AudioFlinger) → 16 kHz mono PCM16
+  data/audio/AudioTrackSink        AudioTrack 48 kHz stereo
+  data/anim/AnimationStore         штатные GIF + GIF из модов, LRU-кэш
+  data/plugin/PluginStore          манифесты, конфиги, безопасная установка zip
+  data/plugin/PluginHost           события → скрипты/бинари, JSON-команды
+  data/net/HttpServer              :8080 web UI + REST + BMP/WAV + SSE
+  data/net/IpcServer               :8081 JSON/TCP
+  data/net/LocalIpcServer          abstract unix socket @quasar-openio
+  data/net/PcmStreamServer         :8082 raw s16le 16 kHz mono
+  data/root/RootManager            su, freeze/unfreeze, autostart, доступ io.sdk к микрофону
+  service/QuasarService            владелец всего runtime, авторежим
+  service/PlaybackMonitor          isMusicActive + AudioPlaybackCallback
+  service/BootReceiver             резервный автозапуск
+  MainActivity                     первичная настройка (потом скрывается)
 ```
+
+Clean Architecture соблюдается в одну сторону: `app` зависит от `domain`,
+`domain` не знает об Android. JVM-тесты (`:domain:test`) проверяют кадры,
+шрифт, часы, осциллограф, `.led`-парсер (включая `rotate`), полосовой фильтр,
+ресемплинг и ring buffer.
+
+## Автозапуск
+
+```text
+/odm/etc/init/quasar-openio.rc
+  → /odm/quasar-openio/quasar-openio-launcher   (PIE ELF, UID 0, u:r:shell:s0)
+  → ждёт SELinux Permissive (StationBreak)
+  → exec /system/bin/am start-foreground-service …
+  → QuasarService
+```
+
+`init` не запускает shell. `/odm` монтируется `rw` только на время установки,
+затем возвращается в `ro`. `/system`, `/vendor`, `/boot`, vbmeta не
+изменяются. Иконка лаунчера скрывается через
+`PackageManager.setComponentEnabledSetting`; вход остаётся через веб и
+`am start -n quasar.rubcut.openio/.MainActivity`.
+
+Автозапуск можно включать и выключать во время работы:
+
+```sh
+curl http://STATION:8080/api/status            # autostart.enabled / installed
+curl -X POST http://STATION:8080/api/autostart -d '{"enabled":false}'
+curl -X POST http://STATION:8080/api/autostart -d '{"enabled":true}'
+```
+
+Флаг хранится в `SharedPreferences` (`autostart_enabled`, по умолчанию
+`true`). При выключении сервис удаляет rc и launcher и возвращает `/odm` в
+`ro`; при следующем старте сервис не восстанавливает их, пока флаг снова не
+включат. Текущее состояние: **автозапуск включён** — rc и launcher
+установлены в `/odm` при установке сборки `2cffee3a…`. Станция
+`YNDX-0008` (`192.168.1.81`) доступна по adb; повторная проверка —
+`ADB_SERIAL=192.168.1.81:5555 ./verify.sh` (см. «Артефакты»).
+
+Первый запуск: `MainActivity` → «Настроить root, автозапуск и запустить».
+Сервис сам выполняет `pm grant RECORD_AUDIO`, `chmod 0666` на fb/input,
+устанавливает rc/launcher (если автозапуск включён), размораживает `io.sdk`
+и скрывает иконку.
+
+## io.sdk и микрофон Алисы
+
+- при старте сервиса выполняется `kill -CONT` всем PID `com.yandex.io.sdk`
+  (`keep_sdk_frozen=false`): без этого Алиса теряет микрофон;
+- автоматической заморозки нет; `SIGSTOP` отправляется только явной
+  сервисной командой (`/api/freeze` или IPC `freeze_sdk`);
+- кнопка Алисы (`alice_pressed`) размораживает `io.sdk`, если он был заморожен
+  вручную;
+- тумблер `mic_passthrough` временно забирает у io.sdk `RECORD_AUDIO`
+  (`appops … ignore`) и перезапускает его процесс, чтобы системные
+  приложения могли открыть микрофон; при выключении и при остановке
+  сервиса доступ возвращается (`allow`) и io.sdk стартует заново;
+- при остановке сервиса/`onDestroy`: `kill -CONT` (страховка);
+- никаких `pm disable`, `pm uninstall`, `am force-stop`;
+- других сигналов, кроме `SIGSTOP`/`SIGCONT`, не отправляется.
+
+## Порты и IPC
+
+| Порт | Назначение |
+| --- | --- |
+| `8080/tcp` | HTTP: web UI, REST, BMP-превью, WAV/PCM снимки, SSE |
+| `8081/tcp` (только loopback) | построчный JSON IPC |
+| `8082/tcp` (только loopback) | сырой PCM `s16le`, 16 кГц, mono |
+| `@quasar-openio` | abstract unix socket, тот же JSON IPC |
+
+Основные HTTP команды:
+
+```sh
+curl http://STATION:8080/api/status
+curl -X POST http://STATION:8080/api/mode -d '{"mode":"clock"}'          # clock|oscilloscope|animation|test|off|auto
+curl -X POST http://STATION:8080/api/render -d '{"ring_color":"#FFB300","ring_enabled":true,"scope_fps":20,"scope_sensitivity":2.5,"scope_smooth":1500,"scope_band":"mid","ring_origin":12}'
+curl -X POST http://STATION:8080/api/ring/pattern -d '{"provider":"quasar.yandex-station2/ring.station.progress","loop":true}'
+curl -X POST http://STATION:8080/api/ring/pattern -d '{}'                # остановить шаблон
+curl http://STATION:8080/api/mods                                        # моды и предметы
+curl -X POST http://STATION:8080/api/mods/install --data-binary @mod.zip
+curl -X POST http://STATION:8080/api/mods/remove -d '{"id":"my.mod"}'
+curl -X POST http://STATION:8080/api/mods/config -d '{"provider":"quasar.oscilloscope/visualizer.scope.wave","values":{"band":"bass","fps":22}}'
+curl -X POST http://STATION:8080/api/mods/activate -d '{"item":"quasar.yandex-station2/ring.station.progress","loop":true}'
+curl -X POST http://STATION:8080/api/autostart -d '{"enabled":false}'
+curl -X POST http://STATION:8080/api/freeze -d '{"action":"freeze"}'
+curl -X POST --data-binary @frame.rgb http://STATION:8080/api/frame   # 1200 байт RGB888
+curl http://STATION:8080/api/mic.wav?ms=2000 -o mic.wav
+curl http://STATION:8080/api/frame.bmp -o frame.bmp
+```
+
+JSON IPC (`nc 127.0.0.1 8081` на станции или через `adb forward`):
+
+```json
+{"cmd":"status"}
+{"cmd":"draw_screen","data":"<base64 RGB888 1200 байт>"}
+{"cmd":"get_mic_pcm","samples":1600}
+{"cmd":"resume_sdk"}
+{"cmd":"freeze_sdk"}
+{"cmd":"set_mode","mode":"auto"}
+{"cmd":"set_render","ring_color":"#4ADE80","scope_fps":8,"scope_band":"bass","ring_origin":3}
+{"cmd":"set_autostart","enabled":false}
+{"cmd":"play_tone","frequency":440,"ms":400}
+```
+
+События приходят в тот же поток: `{"event":"alice_pressed",...}`,
+`{"event":"volume_up",...}`, `{"event":"remote_ok",...}`,
+`{"event":"auto_mode",...}`, `{"event":"ring_pattern",...}`,
+`{"event":"plugin_installed",...}` и т.д. HTTP-клиенты получают их через SSE
+`/api/events`.
+
+## Аудио
+
+- Вход: штатный Android-эффект `Visualizer` (сессия 0). В прошивке есть
+  `/vendor/lib/soundfx/libvisualizer.so`, объявленный в
+  `/vendor/etc/audio_effects.conf`, поэтому эффект снимает **готовый микс
+  AudioFlinger**: музыку, видео (в том числе SmartTube) и голос Алисы.
+  Ни ALSA, ни `AudioRecord`, ни микрофон не открываются — воспроизведение
+  и Алиса продолжают работать как обычно.
+- Слушатель подписывается на `Visualizer.getMaxCaptureRate()` (на этой
+  прошивке 20 000 мГц = 20 колбэков/с) с окном 1024 сэмпла. Волна приходит
+  как unsigned 8-bit с центром 128: код переводит её в PCM16 и децимирует
+  микс 44,1 кГц → 16 кГц. Практический потолок визуализатора — ~20 кадров/с,
+  он виден в `/api/status` как `render.scope_fps_actual`.
+- Захват открывается только в режиме `oscilloscope` (в авторежиме — когда
+  играет медиа) и закрывается при переходе в часы/анимацию/тест/off, а также
+  перед `unfreezeSdk()`, чтобы эффект не висел поверх сессии Алисы.
+- `prepareRuntime()` выдаёт `RECORD_AUDIO` и приложению (клиент эффекта), и
+  `com.yandex.io.sdk`, чтобы Алиса сохранила доступ к микрофону.
+- Если эффект отвалился (AudioFlinger пересоздал выходной поток), сервис
+  повторяет попытку с backoff 15→120 с и показывает ошибку в `/api/status`
+  (`audio.capture`, `audio.input_error`).
+- Почему не прямой ALSA (`tinycap2`): на этой прошивке TDM-A общий для
+  capture и playback. Жёсткое завершение оставляет MCLK выключенным,
+  захват падает с `Unable to open PCM device ()`, а DMA воспроизведения
+  клинит до перезагрузки. Такой путь удалён из кода.
+- Почему не `AudioRecord`: открытие/закрытие идёт через вендорный
+  `AudioPolicyService`, а сессия конкурирует с Алисой за микрофон.
+  Визуализатору микрофон не нужен вовсе.
+- Выход: `AudioTrack`, 48 кГц, stereo, `USAGE_MEDIA`. Это осознанный
+  fallback: `appsrc name=stream-src` находится внутри
+  `libquasar_daemons.so` процесса `io.sdk`, внешнего протокола подачи PCM в
+  него нет.
+- `AudioTrack` не трогает системную громкость, часовой пояс и настройки
+  `io.sdk`.
+
+## Дисплей
+
+- `fb4`: 25×16, RGB888, stride 75, offsets R16/G8/B0, `smem_len` 4096.
+- `fb5`: 24×1, RGB888, stride 72.
+- Только `mmap` (`PROT_READ|PROT_WRITE`, `MAP_SHARED`), без `write()`.
+- После записи кадра обязателен commit: `ioctl(fd, FBIOPAN_DISPLAY, &var)`.
+  Драйверы `quasar_led_screen` и `quasar_led_ring` отправляют изображение
+  на панель/кольцо именно из `fb_pan_display` (`qls_fb_sync`/`fb_sync` →
+  `sa_show_pic` / `led_set_brightness`). Без этого ioctl кадр остаётся
+  только в памяти и панель показывает последний отправленный кадр.
+- Kotlin публикует последний кадр, C++ поток рисует изменившееся и
+  вызывает `FBIOPAN_DISPLAY` для соответствующего fb.
+
+## Экран, кольцо и визуализатор
+
+- **Часы**: только белые цифры `HH:MM` на чёрном фоне. Нижней полосы,
+  прогресса, сетки и других линий нет; двоеточие мигает раз в секунду.
+  Цифры рисуются штатными атласами io.sdk
+  (`frontal_animation/fonts/clock_{large,middle,small}.gif`): 5×9, 4×7 и
+  3×5. Крупный размер занимает панель от края до края и пиксель в пиксель
+  совпадает с эталоном `25x16/25x16_Clock.gif`.
+- **Кольцо**: 24 светодиода. Физический индекс `0` — задняя/нижняя
+  точка кольца, индексы растут **против часовой стрелки**, поэтому
+  передний светодиод — `12`. Часы идут **по часовой стрелке**. Параметр
+  `ring_origin` (0–23) привязывает «передний» светодиод к физическому;
+  по умолчанию — `12`. Сдвиг применяется и к шаблонам, и к
+  сгенерированному кольцу. Кольцо можно полностью выключить
+  (`ring_enabled=false`) или задать любой цвет.
+- **Шаблоны кольца**: `.led`-файлы Яндекс Станции (118 штук в моде).
+  Поддерживаются `loop`, `gammacorrection`, `smooth N`, `gradient`,
+  обычные кадры `RRGGBB … <ms>`, свободный формат с brightness и директива
+  `rotate` (вращение кадра на один LED за длительность кадра — так работает
+  штатный `progress.led`). Активный шаблон приоритетнее VU-уровня и
+  часового кольца; статичный кадр, присланный скриптом, приоритетнее
+  шаблона. Удаление мода снимает и шаблон, и статичный кадр.
+- **Визуализатор**: один визуализатор — «Волна». Одна белая линия на
+  чёрном фоне, без сетки и центральной линии, все пиксели линии одной
+  яркости. Сигнал берётся из микса воспроизведения: тихий материал
+  подтягивается автоматическим усилением (пик окна к ~79 % шкалы, не более
+  ×96), поверх него работает пользовательская чувствительность 0.25–8.
+  Волна обновляется по таймеру 10 мс и только при новом аудиочанке:
+  `scope_fps` задаёт верхнюю границу 1–50, фактическая частота видна как
+  `scope_fps_actual` (на этой прошивке ~20 из-за `Visualizer`).
+- **Плавность** (`scope_smooth`, 0–5000 мс, по умолчанию 1500): когда
+  воспроизведение останавливается, последняя волна не сменяется мгновенно
+  прямой — она плавно затухает к центру за заданное время. `0` возвращает
+  мгновенную прямую. PCM старше 180 мс считается тишиной, поэтому старый
+  буфер не «замораживает» картинку. Кольцо в режиме визуализатора — это
+  VU-уровень, спектра на кольце больше нет.
+- **Диапазон частот** (`scope_band`) — это одновременно полосовой фильтр
+  (RBJ biquad) и развёртка окна: `full` 20 Гц–8 кГц, `bass` 20–200 Гц,
+  `low_mid` 200–800 Гц, `mid` 0.8–3 кГц, `high` 3–8 кГц. Низкие частоты
+  показываются медленнее и крупнее, высокие — быстрее и мельче.
+- **Анимации**: все 105 штатных GIF из `frontal_animation/25x16` вшиты в
+  `assets/anim` и сгруппированы по папкам (`media`, `oknix`, `calls`, …).
+  Декодер написан на чистом Kotlin и сохраняет исходные оттенки: клипы
+  содержат до 122 уровней серого, а не два. Любой клип можно проиграть
+  поверх текущего режима или назначить idle-анимацией; цвет анимации
+  задаётся отдельно.
+- Настройки (`ring_color`, `ring_enabled`, `scope_fps`,
+  `scope_sensitivity`, `scope_smooth`, `scope_band`, `ring_origin`,
+  `clock_size`, `idle_animation`, `animation_color`, `auto_enabled`)
+  сохраняются в `SharedPreferences` (`quasar_settings`) и переживают
+  перезапуск сервиса. В API остались `ring_spectrum=false` и
+  `scope_style=wave` для старых клиентов.
+
+## Авторежим
+
+`POST /api/mode {"mode":"auto"}` включает сервисный флаг `auto_enabled`;
+`mode` в статусе становится `auto`, а фактический рендер — в
+`mode_effective` (`clock` или `oscilloscope`). Логика:
+
+- ничего не играет → **часы**;
+- медиа реально играет → **визуализатор** (и захват открывается);
+- воспроизведение определяется только
+  `PlaybackMonitor.currentState() == MediaState.PLAYING`
+  (`AudioManager.isMusicActive()` + `AudioPlaybackCallback`); загруженный
+  или поставленный на паузу плеер визуализатор не включает;
+- имена активных пакетов берутся из callback (видны в `auto.packages` и
+  только для информации);
+- сервис никогда не останавливает и не ставит на паузу чужие приложения;
+  решение принимается только по факту воспроизведения.
+
+Чтобы не дёргать картинку на коротких звуках, смена режима применяется с
+задержкой: 1.5 с на старт музыки и 12 с на остановку (переживает паузы
+между треками и рекламу). `auto.playing` в статусе — текущее состояние
+`PLAYING`.
+
+Выбор любого другого режима снимает `auto_enabled`.
+
+## Моды и предметы
+
+Встроенные моды лежат в `assets/plugins/<id>/`, пользовательские — в
+`filesDir/plugins/<id>/`. Мод — это папка с `manifest.json` и
+необязательными `scripts/`, `bins/`, `led/`, `anim/`.
+
+Манифест описывает **предметы** (`items`): у каждого есть `kind`
+(`screen` / `ring` / `script` / `service`) и, для экранных, `slot`
+(`clock` / `visualizer` / `animation`). Старый формат `providers` с
+полем `type` продолжает работать: тип конвертируется в kind, а слот
+выводится из типа или `builtin`.
+
+Архив для установки содержит верхнюю папку `plugin/`:
+
+```text
+plugin/manifest.json
+plugin/led/hello.led
+plugin/scripts/on_alice.sh
+```
+
+Ограничения: 64 МБ архив, 64 МБ распакованного, 5000 файлов, пути
+проверяются на `..`; id — только `a-z0-9._-`. Скрипты и бинари получают
+бит execute после установки.
+
+Пример манифеста:
+
+```json
+{
+  "id": "com.example.my-mod",
+  "name": "Мой мод",
+  "version": "1.0.0",
+  "author": "you",
+  "items": [
+    {
+      "id": "ring.hello",
+      "kind": "ring",
+      "name": "Приветствие",
+      "group": "Мои шаблоны",
+      "resource": "led/hello.led"
+    },
+    {
+      "id": "clock.custom",
+      "kind": "screen",
+      "slot": "clock",
+      "name": "Часы",
+      "builtin": "clock",
+      "config": [
+        {"key": "clock_size", "label": "Размер", "kind": "select", "default": "large",
+         "options": [{"value": "large", "label": "Крупные"},
+                     {"value": "middle", "label": "Средние"},
+                     {"value": "small", "label": "Мелкие"}]}
+      ]
+    },
+    {
+      "id": "events.alice",
+      "kind": "script",
+      "name": "Кнопка Алисы",
+      "entry": "scripts/on_alice.sh",
+      "events": ["alice_pressed"]
+    }
+  ]
+}
+```
+
+Виды предметов:
+
+| `kind` | `slot` | Что делает при активации |
+| --- | --- | --- |
+| `screen` | `clock` | выбирается в слот часов |
+| `screen` | `visualizer` | выбирается в слот визуализатора (`builtin`: `oscilloscope`) |
+| `screen` | `animation` | назначается idle-анимацией (`resource`: `builtin:anim/…` или файл мода) |
+| `ring` | — | включает `.led`-шаблон из `resource` |
+| `script` | — | запускает `entry` на события из `events` (или разово через `/api/mods/activate`) |
+| `service` | — | фоновый процесс под вотчдогом OpenIO (`entry`, `interpreter`, `restart`) |
+
+Эквиваленты legacy-типов: `clock` → `screen/clock`, `visualizer` →
+`screen/visualizer`, `animation` → `screen/animation`, `ring` → `ring`,
+`script` → `script`, `service` → `service`.
+
+Конфиг-поля (`config`) поддерживают `kind`: `select`, `range`, `number`,
+`boolean`, `color`, `text`, `min`/`max`/`step`, `unit`, `help`, `options`.
+Значения сохраняются на предмет и применяются к встроенным виджетам по
+ключам `clock_size`, `band`, `fps`, `sensitivity`, `smooth`,
+`color`, `animation_color`.
+
+Протокол скрипта:
+
+- сервис передаёт JSON события на stdin;
+- окружение: `QUASAR_API` (`http://127.0.0.1:8080`), `QUASAR_PACK`,
+  `QUASAR_PROVIDER`, `QUASAR_PACK_DIR`, `QUASAR_CONFIG` (JSON конфига);
+- stdout — по одной JSON-команде на строку:
+
+```json
+{"ring":"#3366ff"}
+{"ring":["#000000", "… 24 цвета"]}
+{"pattern":"led/alice.led","loop":true}
+{"animation":"builtin:anim/media/25x16_Pause.gif"}
+{"mode":"oscilloscope"}
+{"notify":"текст"}
+```
+
+- таймаут 5 с, вывод ограничен 64 КБ, пул из трёх потоков; скрипт никогда
+  не выполняется на потоке аудио/ввода/HTTP;
+- пустой список `events` означает «не подписан», а не «все события» —
+  иначе обработчик уведомлений зациклился бы сам на себе.
+
+Встроенные моды этой сборки:
+
+| Мод | Что внутри |
+| --- | --- |
+| `quasar.yandex-station2` | 118 шаблонов кольца (39 активных, 39 Quark, 40 Nebula), 105 GIF, часы, визуализатор, пример скрипта — 225 предметов |
+| `quasar.oscilloscope` | единственный визуализатор «Волна» с конфигами диапазона, FPS и чувствительности |
+
+Веб-интерфейс (карточка **«Моды и предметы»** в разделе «Общие») показывает
+моды и предметы с их kind/slot, даёт установить zip, удалить пользовательский
+мод, включать и выключать моды и предметы, отредактировать параметры рядом с
+каждым предметом, запустить сервис/скрипт и активировать предмет своего вида
+(экранный — в свой слот, кольцо — как шаблон).
+
+## Веб-панель и новые подсистемы
+
+Веб-интерфейс переписан в стиле Material Design 3 (оффлайн, без внешних
+CDN/шрифтов): нижняя навигация с 4 разделами — **Часы**, **Визуализаторы**,
+**Анимации**, **Общие**. Основной сценарий максимально упрощён: в каждом
+разделе видны только переключатель, крупный предпросмотр и одно главное
+действие, а выбор провайдера, конфиги, шаблоны кольца, кнопки, система и
+журнал спрятаны в раскрывающиеся блоки **«Дополнительно»** (`<details>`).
+На телефонах (`@media (max-width: 640px)`) уменьшены отступы и превью,
+увеличены зоны нажатия, а нижняя навигация остаётся всегда под рукой.
+Над разделами всегда виден живой предпросмотр: экран 25×16
+(`/api/frame.bmp`) и кольцо 24 LED (canvas, `/api/ring`). Тема — фиолетовая
+палитра MD3, тёмная/светлая по `prefers-color-scheme`; компоненты (switch,
+слайдеры, сегментные кнопки, диалоги `mdConfirm`, snackbar, bottom nav)
+отрисованы вручную на CSS/JS.
+
+Новые подсистемы (все настройки живут в prefs `quasar_settings`):
+
+- **Мастер-выключатель** (`master_enabled`, default true): «off» гасит всю
+  панель (режим `off`, захват закрыт), запоминает прежний режим в
+  `master_prev_mode`; «on» возвращает режим или авторежим. Пока мастер
+  выключен, `setMode` принимает только `off`.
+- **Экран** (`screen_enabled`): гасит только экран 25×16, кольцо продолжает
+  работать (`QuasarEngine.screenEnabled` гейтит publish и drawCustomFrame).
+- **Микрофон** (`mic_share`, default true): при выключении наш захват не
+  открывается вовсе (io.sdk владеет микрофоном); при активации Алисы захват
+  приостанавливается на 12 с (`ALICE_CAPTURE_PAUSE_MS`).
+- **Проброс микрофона** (`mic_passthrough`, default false): наш захват
+  останавливается, `appops set com.yandex.io.sdk RECORD_AUDIO ignore`
+  забирает разрешение у io.sdk, а `kill -9` перезапускает его, чтобы
+  закрылась уже открытая сессия записи — после этого `AudioRecord` могут
+  открыть системные приложения. Watchdog повторяет запрет, если система
+  сбросила app-op; при выключении и при остановке сервиса возвращается
+  `allow` и io.sdk снова стартует с микрофоном.
+- **Автоанимации медиа** (`media_anim_enabled/play/pause/stop`, выключены по
+  умолчанию): при старте/паузе/остановке воспроизведения один раз
+  проигрывается оверлей штатного io — по умолчанию
+  `media/25x16_Resume.gif` для play и `media/25x16_Pause.gif` для pause,
+  stop пустой; клипы настраиваются из каталога `/api/animations`
+  (кроме тестовых). Определение состояния — `PlaybackMonitor.currentState()`
+  (config-и + `isMusicActive`), с задержкой 0.8/0.8/3 с для устойчивости.
+- **Кольцо → громкость** (`ring_volume_enabled` default true,
+  `ring_volume_step` 1–5, `ring_volume_anim` default true): вращение
+  энкодера меняет `STREAM_MUSIC` (фолбэк — root `input keyevent 24/25`);
+  фидбек как в штатном io — клип `rcu_volume/volume_rotation|volume_pulse/
+  <up|down>/<0..10>.gif` на экране и дуга LED на кольце, автоочистка через
+  1.6 с после последнего щелчка.
+- **Переназначение кнопок** (`input_bindings`): JSON-привязки ключей
+  (`ALICE`, `VOLUME_UP/DOWN`, `MUTE`, `REMOTE_*`, `HEADPHONES`) к действиям:
+  `none, volume_up/down, play_pause, next, previous, stop_media, alice,
+  mute, toggle_screen, toggle_ring, clock, visualizer, animation`,
+  `script:<itemKey>` (скрипт мода), `anim:<clipId>` (оверлей). Дефолты:
+  Алиса→alice, кольцо→громкость, mute→журнал, пульт play/next/prev→медиа.
+- **Алиса**: при нажатии кнопки Алисы (или POST `/api/alice`) сервис
+  размораживает `io.sdk`, если пользователь его замораживал, и только тогда
+  шлёт `input keyevent 219` (VOICE_ASSIST) — без двойного срабатывания,
+  когда io.sdk получает кнопку нативно.
+
+Новые эндпоинты:
+
+| Метод/путь | Что делает |
+| --- | --- |
+| `GET /api/general` | `{ok, master, screen, mic_share, mic_passthrough, ring_volume{enabled,step,anim}, media_anim{enabled,play,pause,stop}, input, alice_available}` |
+| `POST /api/general` | подмножество `{master, screen, mic_share, mic_passthrough, ring_volume_enabled, ring_volume_step, ring_volume_anim}` |
+| `POST /api/media-anim` | подмножество `{enabled, play, pause, stop}` (`""` = нет клипа) |
+| `GET /api/remap` | `{ok, bindings[{key,title,device,action}], actions[{id,title}]}` (действия дополнены `script:*`/`anim:*`) |
+| `POST /api/remap` | `{key, action}` или `{reset:true}` |
+| `POST /api/alice` | активация Алисы (разморозка + VOICE_ASSIST) |
+
+В `/api/status` добавлены блоки `general`, `media_anim` и массив `remap`;
+SSE публикует события `master`, `general`, `screen_enabled`, `mic_share`,
+`mic_passthrough`, `ring_volume`, `media_anim`, `media_anim_config`,
+`volume_changed`, `remap`, `alice_activated`.
+
+Android-приложение тоже переведено на Material Design 3: тема
+`Theme.AppCompat.DayNight.NoActionBar` (androidx.appcompat 1.7.0 +
+core-ktx 1.13.1, оффлайн-констрейнты lifecycle 2.8.6/annotation 1.8.1/coroutines
+1.8.1 — все версии есть в локальном кэше Gradle), карточки, кнопки
+filled/tonal/outlined с рябью, светлая/тёмная палитра. Новая иконка —
+adaptive (`mipmap-anydpi-v26`, фон+передний план+monochrome для themed icons
+Android 13+) и legacy PNG во всех плотностях: LED-кольцо из 24 точек вокруг
+dot-matrix панели. Скрытие иконки лаунчера сохранено (activity-alias).
 
 ## Сборка
 
-Обычная host-сборка:
+```sh
+./build.sh          # launcher + domain tests + debug APK + dist/SHA256SUMS
+./install.sh        # adb install, setup, status
+./verify.sh         # проверка пакета, сервиса, rc, /odm, HTTP, паков
+```
+
+Требования: JDK 17, Android SDK `platforms/android-34`, Linux build-tools
+`34.0.0`, NDK r26d (`26.3.11579264`), CMake/Ninja. Пути по умолчанию
+соответствуют этой машине; переопределяются через `ANDROID_SDK_ROOT`,
+`ANDROID_NDK_ROOT`, `JAVA_HOME`, `ADB_SERIAL`.
+
+## Эмулятор панели (ПК)
+
+Модуль `emulator/` — Swing-приложение, которое хостит настоящий
+`QuasarEngine` (тот же код, что на станции) с синтетическим источником
+звука и рисует экран 25×16 и кольцо 24 LED. Станция не нужна — она может
+быть выключена; Алиса и голосовые функции не используются вовсе.
 
 ```sh
-make
-make test
-make sanitize
-make fb-info
+./emulator.sh                        # GUI
+./emulator.sh --selftest TONE_440    # headless ASCII-проверка
 ```
 
-Статическая сборка через Docker, как требует ТЗ:
+- Источники звука: тишина, тон 440/1000 Гц, шум и симуляция музыки
+  (кик + бас + хэты + аккорд), чтобы волна повторяла материал как на
+  станции.
+- Контролы: режим, источник, уровень и чувствительность, `clock_size`,
+  idle-GIF (как на панели). Визуализатор один — «Волна»; спектра на кольце
+  и выбора стилей больше нет. Кольцо эмулятора показывает физическую
+  раскладку: LED 0 снизу, LED 12 спереди.
+- В GUI можно переключить источник экрана/кольца на «живой вид» станции
+  через HTTP (`adb forward tcp:18080 tcp:8080`, URL — первый аргумент,
+  по умолчанию `http://127.0.0.1:18080`); это опция, по умолчанию
+  рисуется локальный движок.
+- Сборка модуля: `./gradlew :emulator:installDist` (при недоступной сети
+  добавить `--offline` — зависимости уже в кэше).
+- Selftest прогоняет 125 кадров движка и печатает экран ASCII
+  (5 уровней яркости): волна для выбранного звука и часы `21:47` крупным
+  шрифтом.
+
+## Ограничения и безопасность
+
+- `mmap` fb/input требует root: при старте выполняется временный
+  `chmod 0666` на устройства. Постоянных правил SELinux нет.
+- Автозапуск пишет только в `/odm/quasar-openio` и `/odm/etc/init`.
+- `unfreezeSdk`/остановка сервиса всегда возвращают `io.sdk` в работу.
+- Перезагрузка выполняется только вручную; приложение не вызывает
+  `reboot`, не меняет время и `persist.sys.timezone`.
+- В циклах нет `system()`: root-команды идут через `Runtime.exec`/`su -c`,
+  в NDK — только `fork/exec` (launcher использует `execl`).
+- Установка мода не выполняет код из архива во время распаковки: скрипты
+  запускаются только по событиям, с таймаутом и ограниченным выводом.
+
+## Известные ограничения
+
+- Подача PCM в `appsrc` внутри `io.sdk` не реализована: нет внешнего
+  протокола; используется прямой `AudioTrack`.
+- `Visualizer` отдаёт не более 20 обновлений в секунду
+  (`getMaxCaptureRate()` = 20 000 мГц), поэтому `scope_fps` выше 20 не
+  добавляет кадров: таймер рендера просто не находит нового `pcmSeq`.
+- `AudioPlaybackConfiguration.getPlayerState()`/`getClientUid()` скрыты в
+  SDK; на этой прошивке рефлексия заблокирована. Поэтому имена
+  media-пакетов в `auto.packages` могут быть пустыми. Сам факт
+  воспроизведения от этого не зависит: авторежим смотрит на
+  `MediaState.PLAYING`, а не на список пакетов.
+- `dumpsys media.audio_flinger` **нельзя вызывать** на этой прошивке: он
+  роняет audio HAL (`HalDeathHandler`), после чего `audioserver`
+  респавнится в `u:r:init:s0`, `media.audio_policy`/`media.audio_flinger`
+  не регистрируются, и звук не восстанавливается без перезагрузки. Проверка
+  в `verify.sh` удалена намеренно; `dumpsys audio` безопасен.
+- Если audio HAL уже упал, микрофон и визуализатор мертвы до перезагрузки:
+  рестарт `audioserver` вручную не помогает (SELinux не даёт `runcon` в
+  `u:r:audioserver:s0`, `ctl.stop audioserver` запрещён).
+- Filesystem-сокет `/data/local/tmp/quasar.sock` в Android 9 недоступен
+  через публичный `LocalServerSocket`; используется abstract
+  `@quasar-openio`, а основной IPC — TCP `127.0.0.1:8081`.
+
+## Артефакты и проверка
+
+Актуальная сборка 2026-11-19 — плавное затухание волны
+(`scope_smooth`), один визуализатор «Волна» без штатных спектр-пресетов,
+честный авторежим по `MediaState.PLAYING`, проброс микрофона системным
+приложениям (`mic_passthrough`), кольцо с передним LED `12` и часами по
+часовой стрелке, максимально упрощённый UI с телефонным видом. Сборка
+установлена на станцию и проверена:
+
+| Файл | SHA-256 |
+| --- | --- |
+| `dist/quasar-openio-debug.apk` | `2cffee3ac4487c03e89b8d22158f61d2ec56ef37a37c3535732bde9eb0eb8039` |
+| `dist/quasar-openio-launcher` | `f35b58ee93007bdfc3733bfe24b014a5964fdb7bfd96bf8937c7bed9f6c63554` |
+| `/odm/etc/init/quasar-openio.rc` | установлен: автозапуск включён |
+
+На `YNDX-0008` (`192.168.1.81:5555`) сборка проверена 2026-11-19:
+`./verify.sh` проходит полностью; `ring_origin=12`,
+`ring_direction=clockwise`, `ring_spectrum=false`, `scope_style=wave`,
+`scope_smooth=1500`, `mic_passthrough=false`; `io.sdk` в состоянии `RUN`
+и не заморожен, `RECORD_AUDIO` выдан и приложению, и `io.sdk`; волна
+берётся из микса воспроизведения (`/api/mic.pcm` отдаёт ненулевой PCM),
+`scope_fps_actual` = 20–25; `fb4` меняется во времени.
+
+Живые проверки этой сборки:
+
+- **Плавность**: при `scope_smooth=2000` после тона волна затухает
+  постепенно (размах 8 → 6 → 4 → 2 → 0 строк за ~1.2 с), а не мгновенно.
+- **Авторежим**: в тишине `auto.playing=false`, `mode_effective=clock`;
+  во время реального воспроизведения `auto.playing=true` и через ~1.5 с
+  включается `oscilloscope`; после остановки — ещё 12 с визуализатора и
+  возврат к часам.
+- **Проброс микрофона**: включение даёт `RECORD_AUDIO: ignore` у
+  `com.yandex.io.sdk`, перезапускает его процесс, закрывает наш захват и
+  показывает `mic_passthrough=true`; выключение возвращает `allow`,
+  перезапускает io.sdk и снова открывает захват визуализатора.
+- **Кольцо**: при `ring_origin=12` индекс растёт против часовой стрелки,
+  поэтому часы идут по часовой: на 15-й секунде горит LED `6`, на
+  45-й — `18`.
+
+Моды и авторежим проверены на устройстве: `/api/mods` отдаёт два
+встроенных мода и пользовательские предметы с kind/slot; установка zip
+`plugin/manifest.json` + `led/` + `scripts/`, активация предмета по kind,
+сохранение конфига и удаление мода работают; скрипт по `alice_pressed`
+перекрасил кольцо через `{"ring":"#00ff00"}`; `scope_band=mid`
+сохраняется. Активный `.led`-шаблон перекрывает VU-кольцо в режиме
+визуализатора; при удалении мода снимаются и шаблон, и статичный кадр.
+
+Порт оригинальных ассетов проверен отдельно: часы `04:58` совпадают с
+`25x16_Clock.gif` пиксель в пиксель (golden-тест), все 105 GIF декодируются
+в те же RGB-кадры, что и эталонный декодер (включая 122 оттенка серого),
+idle-анимация и оверлей работают на устройстве, три размера часов дают
+разные кадры, каталог `/api/animations` отдаёт 105 клипов в 13 группах.
+
+## Проверка на станции
 
 ```sh
-# На x86_64-host сначала нужен binfmt/QEMU для linux/arm64.
-docker run --privileged --rm \
-  tonistiigi/binfmt@sha256:400a4873b838d1b89194d982c45e5fb3cda4593fbfd7e08a02e76b03b21166f0 \
-  --install arm64
-docker build --platform linux/arm64 -t quasar-openio-builder .
-id=$(docker create --platform linux/arm64 quasar-openio-builder)
-mkdir -p build/aarch64
-docker cp "$id:/quasar_openio" ./build/aarch64/quasar_openio
-docker cp "$id:/plugins/standard/quasar_pack" ./build/aarch64/quasar_pack
-docker rm "$id"
-file build/aarch64/quasar_openio build/aarch64/quasar_pack
-# Оба файла: ELF 64-bit ARM aarch64, statically linked.
+adb -s 192.168.1.81:5555 forward tcp:18080 tcp:8080
+curl http://127.0.0.1:18080/api/status
+curl http://127.0.0.1:18080/api/plugins
+adb shell 'su -c "for p in \$(pidof com.yandex.io.sdk); do awk \"{print \\\$3}\" /proc/\$p/stat; done"'
 ```
 
-Альтернативная cross-сборка без Docker, проверенная в этой среде:
-
-```sh
-python3 -m pip install ziglang==0.13.0
-mkdir -p build/aarch64
-python3 -m ziglang cc -target aarch64-linux-musl -static-pie -fPIE -std=c11 -O2 \
-  -Iinclude -Wall -Wextra -Wpedantic -Wshadow -Wformat=2 \
-  -Wconversion -Wsign-conversion -Werror -fstack-protector-strong \
-  -D_FORTIFY_SOURCE=2 -Wl,-z,relro,-z,now,-z,noexecstack src/*.c \
-  -o build/aarch64/quasar_openio
-python3 -m ziglang cc -target aarch64-linux-musl -static-pie -fPIE -std=c11 -O2 \
-  -Iinclude -Wall -Wextra -Wpedantic -Wshadow -Wformat=2 \
-  -Wconversion -Wsign-conversion -Werror -fstack-protector-strong \
-  -D_FORTIFY_SOURCE=2 -Wl,-z,relro,-z,now,-z,noexecstack \
-  pack/*.c src/util.c src/framebuffer.c src/json.c \
-  -o build/aarch64/quasar_pack
-readelf -h build/aarch64/quasar_openio build/aarch64/quasar_pack | grep Machine
-readelf -l build/aarch64/quasar_openio build/aarch64/quasar_pack | grep INTERP || true
-```
-
-Runtime не требует Python, GStreamer, shell или динамического загрузчика.
-Плагин `quasar_pack` открывает fb4 и fb5 сам и пишет только в `mmap`. Демон
-запускает его и передаёт кнопки. Подробнее: [`docs/PACK.md`](docs/PACK.md).
-
-## Запуск
-
-Обычный режим ожидает доступ к устройствам и право посылать сигналы `io.sdk`
-(в поставляемом init-файле это root):
-
-```sh
-./quasar_openio --help
-./quasar_openio \
-  --socket /data/local/tmp/quasar.sock \
-  --socket-mode 0600 \
-  --audio-port 19080 \
-  --http-port 19081
-```
-
-Для проверки протокола без обращения к железу и без сигналов:
-
-```sh
-./quasar_openio --dry-run --no-audio --socket /tmp/quasar.sock
-```
-
-`--dry-run` не открывает input/framebuffer, не пишет journal и не посылает
-`SIGSTOP`/`SIGCONT`. Loopback audio можно оставить включённым или отключить
-`--no-audio`.
-
-По умолчанию Unix socket имеет режим `0600`. Для доступа приложений используйте
-выделенную группу, а не `0777`:
-
-```sh
-./quasar_openio --socket-mode 0660 --socket-gid 12345
-```
-
-Android-приложению обычно нужен `android.net.LocalSocket`, подходящий UID/GID и
-SELinux-разрешение на подключение к socket-файлу. Один демон на устройство
-защищён `flock`-файлом `/data/local/tmp/quasar_openio.lock`.
-
-## Unix JSON API
-
-Протокол: NDJSON, одна JSON-команда на строку, ответ также завершается `\n`.
-Поддерживаются только плоские объекты со строковыми полями `action` и `data`.
-Неизвестные поля, дубликаты, вложенные объекты, Unicode вне ASCII и команды без
-`action` отклоняются. Максимум строки запроса — 4095 байт, клиентов — 8,
-ответная очередь клиента — 8192 байта. Медленный клиент отключается, а не
-накапливает память.
-
-Команды:
-
-```json
-{"action":"pause_sdk"}
-{"action":"resume_sdk"}
-{"action":"music_state","data":"playing|paused|stopped|idle|auto"}
-{"action":"plugin_animation","data":"<mode from the plugin manifest>"}
-{"action":"status"}
-```
-
-`draw_screen`/`draw_ring` (base64, ровно 1200/72 байта RGB888) остались как
-legacy-режим и работают **только** с `--no-plugin`. Если плагин загружен, они
-отклоняются с `plugin_owns_output`: рисует плагин, а не демон.
-
-Примеры ответов:
-
-```json
-{"ok":true,"signal_requested":true}
-{"ok":true,"queued":true}
-{"ok":false,"error":"invalid_frame_data"}
-{"ok":false,"error":"hardware_unavailable"}
-{"ok":false,"error":"sdk_identity_changed"}
-{"ok":false,"error":"plugin_owns_output"}
-{"ok":false,"error":"invalid_music_state"}
-```
-
-`queued:true` означает, что кадр проверен и поставлен в однослотовую очередь
-«последний кадр побеждает». Это не подтверждение того, что драйвер физически
-вывел кадр. Частота вывода ограничена примерно 58 кадрами/с на каждый framebuffer.
-
-События рассылаются всем подключённым Unix-клиентам:
-
-```json
-{"event":"button_alice_pressed","source":"panel","code":582}
-{"event":"button_alice_released","source":"panel","code":582}
-{"event":"microphone_mute_on","source":"panel","code":14}
-{"event":"microphone_mute_off","source":"panel","code":14}
-{"event":"volume_up","source":"rotary","code":104}
-{"event":"volume_down","source":"rotary","code":109}
-{"event":"volume_up","source":"remote","code":115}
-{"event":"button_power_pressed","source":"remote","code":116}
-```
-
-Демон только наблюдает `/dev/input/event*` через `poll()` и не делает
-`EVIOCGRAB`, поэтому Android и `io.sdk` продолжают получать те же события.
-Перед открытием проверяется имя устройства через `EVIOCGNAME`; неверный event-узел
-не читается. Громкость и микрофон штатно не перехватываются, чтобы не было
-двойного управления.
-
-Пример клиента:
-
-```sh
-python3 examples/client.py --socket /data/local/tmp/quasar.sock status
-python3 examples/client.py pause
-python3 examples/client.py music-state playing
-python3 examples/client.py animation volume-ring
-python3 examples/client.py listen
-```
-
-## Framebuffer
-
-- Экран: `/dev/graphics/fb4`, 25×16, входной кадр ровно 1200 байт RGB888.
-- Кольцо: `/dev/graphics/fb5`, 24×1, входной кадр ровно 72 байта RGB888.
-
-Перед выводом демон читает `FBIOGET_FSCREENINFO` и `FBIOGET_VSCREENINFO` и
-отказывается работать, если геометрия/формат не соответствуют ожидаемым.
-`stride` берётся из `fix.line_length`, а не предполагается равным 75/72. Padding
-строк не записывается. Поддерживаются оба типичных порядка байт 24-bit truecolor:
-RGB и BGR, согласно `red/green/blue.offset`. Запись идёт только в `mmap()`-память;
-`write()`, `msync()`, pan и смена видеорежима не используются.
-
-Read-only проверка перед первым выводом:
-
-```sh
-./fb_info /dev/graphics/fb4
-./fb_info /dev/graphics/fb5
-```
-
-Ожидаемые значения для этого ТЗ: `25x16/24bpp stride>=75` и `24x1/24bpp
-stride>=72`. Если драйвер сообщает другую геометрию, демон не пытается её
-исправить. `SIGSTOP` замораживает процесс `io.sdk`, но **не закрывает его mmap и
-file descriptors**; одновременный вывод возможен только если драйвер это
-допускает. При сомнении сначала проверьте поведение на одном кадре минимальной
-яркости.
-
-## Управление io.sdk
-
-`pause_sdk` находит ровно один процесс с первым аргументом cmdline
-`com.yandex.io.sdk`, проверяет `/proc/<pid>/stat` starttime и посылает `SIGSTOP`
-напрямую. `resume_sdk` повторно проверяет PID/starttime/cmdline и посылает
-`SIGCONT`. Если процесс уже остановлен не нами, демон не принимает его на себя и
-не размораживает автоматически. Если найдено несколько точных совпадений, команда
-завершается ошибкой `ambiguous_sdk_process`.
-
-Перед `SIGSTOP` пишется root-only journal
-`/data/local/tmp/quasar_openio.sdk`. После аварийного завершения демона следующий
-запуск возобновляет только тот процесс, который совпадает с journal по
-`boot_id`, PID, starttime и package. При штатном `SIGTERM`/`SIGINT` демон сам
-посылает `SIGCONT`, закрывает клиенты и устройства, удаляет socket и выходит.
-
-Ограничения:
-
-- `SIGSTOP` замораживает сервисы внутри процесса, поэтому Alice и другие функции
-  `io.sdk` могут стать недоступны до `resume_sdk`.
-- В Linux 4.9 нет `pidfd`; остаётся узкое окно PID-reuse между проверкой и
-  `kill()`. Starttime и повторная проверка уменьшают риск, но не устраняют его
-  математически полностью.
-- Демон не использует `pm disable`, `pm uninstall`, `am force-stop` и не пишет в
-  PackageManager.
-
-## Стандартный плагин
-
-`quasar_openio` только запускает бинарник и управляет кнопками и режимами.
-Плагин рисует **и экран, и кольцо сам**: mmap fb4 (25×16) и mmap fb5 (24×1)
-через один и тот же валидатор геометрии и `stride`. Никакой ретрансляции кадров
-через демон нет.
-
-Плагины считаются доверенными и намеренно работают с root UID в том же
-SELinux-домене, что и демон: прямой доступ к экрану, кольцу и другим устройствам
-является частью плагинного контракта. Root не отменяет SELinux enforcing, поэтому
-доступ к device nodes всё равно должен быть явно разрешён политикой.
-
-```text
-quasar_pack MODE --screen /dev/graphics/fb4 --ring /dev/graphics/fb5 \
-  --fps 30 --brightness 64 --duration-ms 900 [--audio-fd 3] [--no-ring]
-```
-
-Кольцо используется **только в анимациях**. Часы, любой idle-контент и
-визуализатор запускаются с `--no-ring` и вообще не открывают fb5. Анимация гасит
-кольцо сама перед выходом.
-
-Обязательный набор: `music-play`, `music-pause`, `mic-on`, `mic-off`,
-`volume-up`, `volume-down`, `volume-ring`. Дополнительно: `plasma`, `rainbow`,
-`starfield`, `pulse`, `rain`.
-
-Логика музыки: старт → `music-play` → `visualizer`; пауза → `music-pause` →
-`clock`; конец музыки или тишина дольше 1500 мс → `clock`. Интро `music-play`
-не прерывается громкостью и микрофоном.
-
-Кнопки: демон наблюдает input без `EVIOCGRAB`, рассылает события Unix-клиентам,
-передаёт их плагину в stdin строками `button <event>` и поднимает стандартные
-анимации для громкости и микрофона.
-
-Манифест `plugins/standard/plugin.conf` ставится в
-`/odm/lib/quasar/plugins/standard/`. Отдельного init-сервиса для плагина нет.
-Полное описание: [`docs/PACK.md`](docs/PACK.md).
-
-## Аудиомост
-
-Вход: TCP **только** `127.0.0.1:19080`, сырой PCM `S16LE`, 48000 Hz, 2 канала,
-frame alignment 4 байта. Один producer; второй отклоняется. Кольцевой буфер —
-262144 байта (~1.36 с). При переполнении старые кадры вытесняются, память не
-растёт. Producer без данных 30 с отключается.
-
-Loopback не аутентифицирует Android UID. До отдельного Unix socket с
-`SO_PEERCRED` порты нужно ограничивать SELinux-политикой доверенного клиента или
-отключать через `--no-audio`; подробнее в [`docs/AUDIO.md`](docs/AUDIO.md).
-
-Выход: HTTP **только** `127.0.0.1:19081`:
-
-- `GET /audio.wav` — потоковый WAV/PCM с неизвестной длиной (`0xffffffff` в
-  RIFF/data полях);
-- `GET /audio.pcm` — сырой S16LE;
-- `GET /health` — JSON-состояние аудио.
-
-Один streaming-consumer; остальные получают 503. HTTP-запросы ограничены, тело и
-pipelining запрещены. Пример отправки:
-
-```sh
-python3 examples/pcm_send.py audio.raw
-curl --no-buffer http://127.0.0.1:19081/audio.wav > out.wav
-```
-
-**Это транспорт, а не доказанное внедрение в `appsrc name=stream-src`.** Объект
-GStreamer `appsrc` находится внутри процесса `io.sdk`; внешний процесс не может
-получить его просто по имени. Совместимость штатного плеера с loopback HTTP/WAV
-нужно проверять на устройстве. Подробная архитектура и варианты внедрения:
-[`docs/AUDIO.md`](docs/AUDIO.md).
-
-## Init, /odm и SELinux
-
-Файл `init/quasar_openio.rc` предназначен для `/odm/etc/init/quasar_openio.rc` с
-контекстом `u:object_r:vendor_configs_file:s0`. Сервис запускается по
-`sys.boot_completed=1`, имеет `disabled` + `oneshot`, чтобы ошибка запуска не
-создала restart-loop. После устранения причины можно запустить вручную:
-
-```sh
-setprop ctl.start quasar_openio
-```
-
-Установка по умолчанию только проверяет и печатает план:
-
-```sh
-sh scripts/install_odm.sh --preview
-```
-
-Применение требует явного подтверждения, что `/odm` не покрыт dm-verity/AVB:
-
-```sh
-sh scripts/install_odm.sh --apply --confirm-odm-unprotected
-```
-
-Скрипт не делает remount, не отключает verity, не меняет PackageManager и не
-запускает сервис. Он проверяет, что `/odm` — отдельный rw mount ext4/f2fs, и
-ставит контексты. Перед preview/apply он также проверяет через `readelf`, что
-оба бинарника — статические ELF64 AArch64 без `INTERP`; по умолчанию берутся
-`build/aarch64/quasar_openio` и `build/aarch64/quasar_pack`. **Флаг `rw` сам по
-себе не доказывает отсутствие verity.** Работающий сервис перед заменой файлов
-нужно остановить. Файлы сначала staging-уются, старые версии сохраняются до
-`sync`, а при ошибке команд выполняется rollback. Оставшиеся `.old`/`.new`
-означают прерванную установку и требуют ручной проверки перед повтором.
-
-RC использует домен `u:r:quasar_openio:s0`, которого нет в стоковой политике.
-Справочные файлы лежат в `sepolicy/`; они должны быть адаптированы под реальные
-контексты устройства и загружены до старта. Не используйте `setenforce 0` как
-решение. Если политика не загружена, init/демон должны fail-closed, а не работать
-в обход SELinux.
-
-## Блокировка OTA
-
-Скрипт по умолчанию ничего не меняет:
-
-```sh
-sh scripts/quasar_block_ota.sh --preview
-sh scripts/quasar_block_ota.sh --apply
-sh scripts/quasar_block_ota.sh --status
-sh scripts/quasar_block_ota.sh --remove
-```
-
-Блокируются адреса:
-
-- `download.cdn.yandex.net`
-- `updater.mobile.yandex.net`
-- `quasar.s3.yandex.net`
-
-Правила ставятся в OUTPUT для IPv4 и IPv6. Если IPv6 отключён в ядре, можно явно
-использовать `--ipv4-only`; иначе отсутствие `ip6tables` считается ошибкой.
-Новая цепочка заполняется до установки jump, старая удаляется после; при ошибке
-новые цепочки откатываются. Скрипт удаляет только цепочки с маркером
-`quasar-openio-ota-v1`.
-
-Важное ограничение: `iptables` резолвит домены один раз. CDN-адреса меняются и
-могут быть общими с другими сервисами Яндекса. Это не постоянный DNS-фильтр.
-Более надёжный вариант — блокировать проверенный UID обновлятора:
-
-```sh
-sh scripts/quasar_block_ota.sh --apply --uid 10xxx
-```
-
-Существующие соединения и уже скачанные пакеты скрипт не удаляет.
-
-## Тесты
-
-```sh
-make test       # GCC strict + демон + OTA mocks + плагин + супервизор
-make sanitize   # ASan/UBSan для всех наборов
-```
-
-`tests/libfixture.c` подменяет ioctl и `kill()` только на host. Эту библиотеку
-нельзя копировать на станцию. Тесты проверяют в том числе:
-
-- отказ от неверной геометрии framebuffer и сохранение padding;
-- RGB/BGR преобразование по offset;
-- canonical base64 и точные размеры 1200/72;
-- отсутствие двойного volume-события на release кольцевой кнопки;
-- PID/starttime/cmdline при pause/resume и crash recovery;
-- bounded audio overflow, тайм-аут пустого/медленного HTTP consumer и
-  slow-client disconnect;
-- обработку всех уже прочитанных NDJSON-команд, включая пакет больше 8 строк;
-- отсутствие `system()`/`popen()` и framebuffer `write()` в production-коде;
-- rollback OTA-правил и отказ от flush чужих цепочек;
-- плагин сам пишет fb4 и fb5, idle/визуализатор не трогают кольцо, анимация
-  гасит кольцо при выходе, padding строк не пишется, отказ при неверной геометрии;
-- отсутствие CPU-spin после `POLLHUP` PCM pipe и утечки унаследованных fd с
-  номерами выше 127 в плагин;
-- супервизор передаёт пути обоих устройств и `--no-ring` для idle, не пишет в
-  fb5 сам, отклоняет `draw_*`, отрабатывает музыкальные переходы и кнопки.
-
-## Чек-лист перед развёртыванием на станции
-
-1. Сделать read-only inventory: `getevent -lp`, `ls -Z /dev/input/event*
-   /dev/graphics/fb*`, `ps -Z | grep com.yandex.io.sdk`, состояние mounts/verity.
-2. Собрать статические AArch64-бинарники демона и плагина, проверить `readelf -h/-l`.
-3. Проверить `fb_info` для fb4/fb5 без записи.
-4. Запустить `--dry-run --no-audio` и проверить JSON-клиентом команды/ошибки.
-5. Адаптировать и загрузить SELinux-политику; убедиться, что нет permissive-обхода.
-6. Установить в `/odm` только после независимой проверки verity-покрытия.
-7. Первый реальный кадр выводить после `pause_sdk`, с минимальной яркостью;
-   сразу проверить `resume_sdk`, кнопки, микрофоны и отсутствие kernel warnings.
-8. Отдельно проверить audio-потребителя: штатный плеер может не принять
-   streaming WAV; при необходимости использовать архитектуру из `docs/AUDIO.md`.
-9. Провести soak-тест с ограничением логов и наблюдением за memory/fd count.
-
-## Лицензия
-
-GPL-3.0-or-later, см. `LICENSE`.
+Ожидается `S`/`R` у PID `io.sdk` (не `T`), `S` у `quasar.rubcut.openio`,
+`"display":{"started":true}`, `"root":true`, `sdk.frozen:false`,
+`keep_sdk_frozen:false`, `ring_origin:12`, `ring_direction:"clockwise"`,
+`ring_spectrum:false`, `scope_style:"wave"`, `scope_smooth:1500`,
+`mic_passthrough:false`.

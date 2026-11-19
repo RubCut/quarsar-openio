@@ -1,0 +1,30 @@
+{
+  "schema": 1,
+  "renderer": "oscilloscope",
+  "display": {
+    "width": 25,
+    "height": 16,
+    "pixel_format": "rgb888"
+  },
+  "algorithm": "single thin white waveform line on a pure black background; the newest 512 mono samples are low-passed into one point per column and connected with vertical segments; a rising zero-crossing trigger keeps the curve steady; no grid and no centre line; automatic gain plus sensitivity scale the curve",
+  "colors": {
+    "background": "#000000",
+    "wave": "#FFFFFF"
+  },
+  "controls": {
+    "default_fps": 30,
+    "max_fps": 50,
+    "default_sensitivity": 1.0,
+    "min_sensitivity": 0.25,
+    "max_sensitivity": 8.0
+  },
+  "window": {
+    "samples": 512
+  },
+  "capture": {
+    "sample_rate": 16000,
+    "channels": 1,
+    "encoding": "s16le",
+    "chunk_ms": 20
+  }
+}
